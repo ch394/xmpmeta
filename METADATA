@@ -1,0 +1,16 @@
+# https://cs.corp.google.com/#google3/devtools/metadata/presubmit.proto
+
+presubmit: {
+  review_notify: "miraleung"
+  review_notify: "tp-cyclops-dev"
+}
+
+presubmit: {
+  check_do_not_submit: {}
+}
+
+presubmit: {
+  check_tests: {
+    project: "xmpmeta"
+  }
+}

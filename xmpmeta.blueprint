@@ -1,0 +1,36 @@
+// blueprint file for the TAP project third_party.xmpmeta
+// https://test.corp.google.com/ui#p=third_party.xmpmeta
+
+include "devtools/blueprint/ncl/blueprint_file.ncl";
+
+blueprint_file = ::blueprint::BlueprintFile(
+  buildable_units = [
+    ::blueprint::BuildableUnit(
+        name = "xmpmeta",
+        enable_release = false,
+        enable_continuous_build = true,
+        build_patterns = [
+          "//third_party/xmpmeta/...",
+        ],
+        test_patterns = [
+          "//third_party/xmpmeta/...",
+        ],
+        build_flags = ["--config=asan", "--compilation_mode=opt"],
+        continuous_build_email = ::blueprint::ContinuousBuildEmailInfo(
+          build_cop_email_addrs = [
+            "miraleung@google.com"
+          ],
+          summary_email_addrs = ["miraleung@google.com"]
+        ),
+      ),
+  ],
+  project_name = "third_party.xmpmeta",
+  project_grouping = ["Chrome & Apps", "Chrome", "Cardboard"],
+  tech_lead = ["miraleung"],
+  mdb_groups = ["vr-prod"],
+  dev_mailing_list = "tp-cyclops-dev@google.com",
+  buganizer_component_ids = [132578],
+  owned_code_depotpaths = [
+    "//depot/google3/third_party/xmpmeta/...",
+  ],
+);
