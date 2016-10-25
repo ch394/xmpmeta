@@ -1,36 +1,22 @@
-// xmpmeta. A fast XMP metadata parsing and writing library.
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2016 The XMPMeta Authors. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// * Redistributions of source code must retain the above copyright notice,
-//   this list of conditions and the following disclaimer.
-// * Redistributions in binary form must reproduce the above copyright notice,
-//   this list of conditions and the following disclaimer in the documentation
-//   and/or other materials provided with the distribution.
-// * Neither the name of Google Inc. nor the names of its contributors may be
-//   used to endorse or promote products derived from this software without
-//   specific prior written permission.
+//      http://www.apache.org/licenses/LICENSE-2.0
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// Author: miraleung@google.com (Mira Leung)
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "serializer_impl.h"
 
 #include <libxml/tree.h>
 
+#include "base/integral_types.h"
 #include "glog/logging.h"
 #include "strings/numbers.h"
 #include "xmpmeta/xml/const.h"
@@ -41,13 +27,9 @@ namespace xml {
 
 // Methods specific to SerializerImpl.
 SerializerImpl::SerializerImpl(
-    const std::unordered_map<string, xmlNsPtr>& namespaces,
-    const std::unordered_map<string, xmlNsPtr>& prefixes,
-    const string& node_name, xmlNodePtr node) :
-    node_name_(node_name), node_(node), namespaces_(namespaces),
-    prefixes_(prefixes) {
+    const std::unordered_map<string, xmlNsPtr>& namespaces, xmlNodePtr node) :
+    node_(node), namespaces_(namespaces) {
   CHECK(node_ != nullptr) << "Node cannot be null";
-  CHECK(!node_name_.empty()) << "Node name cannot be empty";
   CHECK(node_->name != nullptr) << "Name in the XML node cannot be null";
 }
 
@@ -73,14 +55,11 @@ bool SerializerImpl::SerializeNamespaces() {
 }
 
 std::unique_ptr<SerializerImpl> SerializerImpl::FromDataAndSerializeNamespaces(
-    const std::unordered_map<string, xmlNsPtr>& namespaces,
-    const std::unordered_map<string, xmlNsPtr>& prefixes,
-    const string& node_name, xmlNodePtr node) {
+    const std::unordered_map<string, xmlNsPtr>& namespaces, xmlNodePtr node) {
   std::unique_ptr<SerializerImpl> serializer =
-      std::unique_ptr<SerializerImpl>(
-          new SerializerImpl(namespaces, prefixes, node_name, node));
+      std::unique_ptr<SerializerImpl>(new SerializerImpl(namespaces, node));
   if (!serializer->SerializeNamespaces()) {
-    LOG(ERROR) << "Could not serialize namespace for node " << node_name;
+    LOG(ERROR) << "Could not serialize namespaces";
     return nullptr;
   }
   return serializer;
@@ -88,29 +67,35 @@ std::unique_ptr<SerializerImpl> SerializerImpl::FromDataAndSerializeNamespaces(
 
 // Implemented methods.
 std::unique_ptr<Serializer>
-SerializerImpl::CreateSerializer(const string& node_name) const {
+SerializerImpl::CreateSerializer(const string& node_ns_name,
+                                 const string& node_name) const {
   if (node_name.empty()) {
     LOG(ERROR) << "Node name is empty";
     return nullptr;
   }
 
-  if (prefixes_.count(node_name_) == 0) {
-    LOG(ERROR) << "Prefix " << node_name_ << " not found in prefix list";
+  if (namespaces_.count(node_ns_name) == 0 && !node_ns_name.empty()) {
+    LOG(ERROR) << "Prefix " << node_ns_name << " not found in prefix list";
     return nullptr;
   }
 
   xmlNodePtr new_node =
-      xmlNewNode(prefixes_.at(node_name_), ToXmlChar(node_name.data()));
+      xmlNewNode(node_ns_name.empty() ? nullptr : namespaces_.at(node_ns_name),
+                 ToXmlChar(node_name.data()));
   xmlAddChild(node_, new_node);
-  return std::unique_ptr<Serializer>(
-      new SerializerImpl(namespaces_, prefixes_, node_name, new_node));
+  return std::unique_ptr<Serializer>(new SerializerImpl(namespaces_, new_node));
 }
 
 std::unique_ptr<Serializer>
-SerializerImpl::CreateItemSerializer(const string& item_name) const {
-  if (prefixes_.count(XmlConst::RdfPrefix()) == 0 ||
-      prefixes_.at(XmlConst::RdfPrefix()) == nullptr) {
+SerializerImpl::CreateItemSerializer(const string& prefix,
+                                     const string& item_name) const {
+  if (namespaces_.count(XmlConst::RdfPrefix()) == 0 ||
+      namespaces_.at(XmlConst::RdfPrefix()) == nullptr) {
     LOG(ERROR) << "No RDF prefix namespace found";
+    return nullptr;
+  }
+  if (!prefix.empty() && !namespaces_.count(prefix)) {
+    LOG(ERROR) << "No namespace found for " << prefix;
     return nullptr;
   }
   if (strcmp(XmlConst::RdfSeq(), FromXmlChar(node_->name)) != 0) {
@@ -118,80 +103,73 @@ SerializerImpl::CreateItemSerializer(const string& item_name) const {
     return nullptr;
   }
 
-  xmlNsPtr rdf_prefix_ns = prefixes_.at(string(XmlConst::RdfPrefix()));
+  xmlNsPtr rdf_prefix_ns = namespaces_.at(string(XmlConst::RdfPrefix()));
   xmlNodePtr li_node =
       xmlNewNode(nullptr, ToXmlChar(XmlConst::RdfLi()));
   xmlNodePtr new_node =
-      xmlNewNode(prefixes_.at(node_name_), ToXmlChar(item_name.data()));
+      xmlNewNode(prefix.empty() ? nullptr : namespaces_.at(prefix),
+                 ToXmlChar(item_name.data()));
   xmlSetNs(li_node, rdf_prefix_ns);
   xmlAddChild(node_, li_node);
   xmlAddChild(li_node, new_node);
-  return std::unique_ptr<Serializer>(
-      new SerializerImpl(namespaces_, prefixes_, item_name, new_node));
+  return std::unique_ptr<Serializer>(new SerializerImpl(namespaces_, new_node));
 }
 
 std::unique_ptr<Serializer>
-SerializerImpl::CreateListSerializer(const string& list_name) const {
-  if (prefixes_.count(XmlConst::RdfPrefix()) == 0 ||
-      prefixes_.at(XmlConst::RdfPrefix()) == nullptr) {
+SerializerImpl::CreateListSerializer(const string& prefix,
+                                     const string& list_name) const {
+  if (namespaces_.count(XmlConst::RdfPrefix()) == 0 ||
+      namespaces_.at(XmlConst::RdfPrefix()) == nullptr) {
     LOG(ERROR) << "No RDF prefix namespace found";
     return nullptr;
   }
-
-  if (prefixes_.count(node_name_) == 0 ||
-      prefixes_.at(node_name_) == nullptr) {
-    LOG(ERROR) << "Node name " << node_name_ << " not found in prefixes";
+  if (!prefix.empty() && !namespaces_.count(prefix)) {
+    LOG(ERROR) << "No namespace found for " << prefix;
     return nullptr;
   }
 
-  xmlNsPtr list_prefix_ns = prefixes_.at(node_name_);
   xmlNodePtr list_node =
-      xmlNewNode(list_prefix_ns, ToXmlChar(list_name.data()));
-  xmlNsPtr rdf_prefix_ns = prefixes_.at(string(XmlConst::RdfPrefix()));
+      xmlNewNode(prefix.empty() ? nullptr : namespaces_.at(prefix),
+                 ToXmlChar(list_name.data()));
+  xmlNsPtr rdf_prefix_ns = namespaces_.at(string(XmlConst::RdfPrefix()));
   xmlNodePtr seq_node = xmlNewNode(nullptr, ToXmlChar(XmlConst::RdfSeq()));
   xmlSetNs(seq_node, rdf_prefix_ns);
   xmlAddChild(list_node, seq_node);
   xmlAddChild(node_, list_node);
-  return std::unique_ptr<Serializer>(
-      new SerializerImpl(namespaces_, prefixes_, node_name_, seq_node));
+  return std::unique_ptr<Serializer>(new SerializerImpl(namespaces_, seq_node));
 }
 
-bool SerializerImpl::WriteBoolProperty(const string& name, bool value) const {
+bool SerializerImpl::WriteBoolProperty(const string& prefix,
+                                       const string& name, bool value) const {
   const string& bool_str = (value ? "true" : "false");
-  return WriteProperty(name, bool_str);
+  return WriteProperty(prefix, name, bool_str);
 }
 
-bool SerializerImpl::WriteProperty(const string& name,
+bool SerializerImpl::WriteProperty(const string& prefix, const string& name,
                                    const string& value) const {
-  return WritePropertyWithPrefix(node_name_, name, value);
-}
-
-bool SerializerImpl::WritePropertyWithPrefix(const string& prefix,
-                                             const string& name,
-                                             const string& value) const {
   if (!strcmp(XmlConst::RdfSeq(), FromXmlChar(node_->name))) {
     LOG(ERROR) << "Cannot write a property on an rdf:Seq node";
     return false;
   }
-  if (prefix.empty() || name.empty() || value.empty()) {
-    LOG(ERROR) << "Property value or name is empty";
+  if (name.empty()) {
+    LOG(ERROR) << "Property name is empty";
     return false;
   }
 
   // Check that prefix has a corresponding namespace href.
-  if (namespaces_.count(prefix) == 0) {
+  if (!prefix.empty() && namespaces_.count(prefix) == 0) {
     LOG(ERROR) << "No namespace found for prefix " << prefix;
     return false;
   }
 
   // Serialize the property in the format Prefix:Name="Value".
-  xmlNsPtr prefix_ns = namespaces_.at(prefix);
-  xmlSetNsProp(node_, prefix_ns, ToXmlChar(name.data()),
-               ToXmlChar(value.data()));
+  xmlSetNsProp(node_, prefix.empty() ? nullptr : namespaces_.at(prefix),
+               ToXmlChar(name.data()), ToXmlChar(value.data()));
   return true;
 }
 
-bool SerializerImpl::WriteIntArray(const string& array_name,
+bool SerializerImpl::WriteIntArray(const string& prefix,
+                                   const string& array_name,
                                    const std::vector<int>& values) const {
   if (!strcmp(XmlConst::RdfSeq(), FromXmlChar(node_->name))) {
     LOG(ERROR) << "Cannot write a property on an rdf:Seq node";
@@ -201,14 +179,13 @@ bool SerializerImpl::WriteIntArray(const string& array_name,
     LOG(WARNING) << "No values to write";
     return false;
   }
-  if (namespaces_.count(node_name_) == 0 ||
-      namespaces_.at(node_name_) == nullptr) {
-    LOG(ERROR) << "No prefix found for " << node_name_;
+  if (namespaces_.count(XmlConst::RdfPrefix()) == 0 ||
+      namespaces_.at(XmlConst::RdfPrefix()) == nullptr) {
+    LOG(ERROR) << "No RDF prefix found";
     return false;
   }
-  if (prefixes_.count(XmlConst::RdfPrefix()) == 0 ||
-      prefixes_.at(XmlConst::RdfPrefix()) == nullptr) {
-    LOG(ERROR) << "No RDF prefix found";
+  if (!prefix.empty() && !namespaces_.count(prefix)) {
+    LOG(ERROR) << "No namespace found for " << prefix;
     return false;
   }
   if (array_name.empty()) {
@@ -216,12 +193,12 @@ bool SerializerImpl::WriteIntArray(const string& array_name,
     return false;
   }
 
-  xmlNsPtr node_ns = namespaces_.at(node_name_);
   xmlNodePtr array_parent_node =
-      xmlNewNode(node_ns, ToXmlChar(array_name.data()));
+      xmlNewNode(prefix.empty() ? nullptr : namespaces_.at(prefix),
+                 ToXmlChar(array_name.data()));
   xmlAddChild(node_, array_parent_node);
 
-  xmlNsPtr rdf_prefix_ns = prefixes_.at(XmlConst::RdfPrefix());
+  xmlNsPtr rdf_prefix_ns = namespaces_.at(XmlConst::RdfPrefix());
   xmlNodePtr seq_node = xmlNewNode(nullptr, ToXmlChar(XmlConst::RdfSeq()));
   xmlSetNs(seq_node, rdf_prefix_ns);
   xmlAddChild(array_parent_node, seq_node);
@@ -235,7 +212,8 @@ bool SerializerImpl::WriteIntArray(const string& array_name,
   return true;
 }
 
-bool SerializerImpl::WriteDoubleArray(const string& array_name,
+bool SerializerImpl::WriteDoubleArray(const string& prefix,
+                                      const string& array_name,
                                       const std::vector<double>& values) const {
   if (!strcmp(XmlConst::RdfSeq(), FromXmlChar(node_->name))) {
     LOG(ERROR) << "Cannot write a property on an rdf:Seq node";
@@ -245,14 +223,13 @@ bool SerializerImpl::WriteDoubleArray(const string& array_name,
     LOG(WARNING) << "No values to write";
     return false;
   }
-  if (namespaces_.count(node_name_) == 0 ||
-      namespaces_.at(node_name_) == nullptr) {
-    LOG(ERROR) << "No prefix found for " << node_name_;
+  if (namespaces_.count(XmlConst::RdfPrefix()) == 0 ||
+      namespaces_.at(XmlConst::RdfPrefix()) == nullptr) {
+    LOG(ERROR) << "No RDF prefix found";
     return false;
   }
-  if (prefixes_.count(XmlConst::RdfPrefix()) == 0 ||
-      prefixes_.at(XmlConst::RdfPrefix()) == nullptr) {
-    LOG(ERROR) << "No RDF prefix found";
+  if (!prefix.empty() && !namespaces_.count(prefix)) {
+    LOG(ERROR) << "No namespace found for " << prefix;
     return false;
   }
   if (array_name.empty()) {
@@ -260,12 +237,12 @@ bool SerializerImpl::WriteDoubleArray(const string& array_name,
     return false;
   }
 
-  xmlNsPtr node_ns = namespaces_.at(node_name_);
   xmlNodePtr array_parent_node =
-      xmlNewNode(node_ns, ToXmlChar(array_name.data()));
+      xmlNewNode(prefix.empty() ? nullptr : namespaces_.at(prefix),
+                 ToXmlChar(array_name.data()));
   xmlAddChild(node_, array_parent_node);
 
-  xmlNsPtr rdf_prefix_ns = prefixes_.at(XmlConst::RdfPrefix());
+  xmlNsPtr rdf_prefix_ns = namespaces_.at(XmlConst::RdfPrefix());
   xmlNodePtr seq_node =
       xmlNewNode(nullptr, ToXmlChar(XmlConst::RdfSeq()));
   xmlSetNs(seq_node, rdf_prefix_ns);

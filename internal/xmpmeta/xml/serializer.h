@@ -70,31 +70,35 @@ class Serializer {
 
   // Returns a Serializer for an object that is an item in a list.
   virtual std::unique_ptr<Serializer>
-      CreateItemSerializer(const string& item_name) const = 0;
+      CreateItemSerializer(const string& prefix,
+                           const string& item_name) const = 0;
 
   // Returns a Serializer for a list of objects.
   virtual std::unique_ptr<Serializer>
-      CreateListSerializer(const string& list_name) const = 0;
+      CreateListSerializer(const string& prefix,
+                           const string& list_name) const = 0;
 
   // Creates a serializer from the current serializer.
+  // node_ns_name is the XML namespace to which the newly created node belongs.
+  // If this parameter is an empty string, the new node will not belong to a
+  // namespace.
+  // node_name is the name of the new node. This paramter cannot be an empty
+  // string.
   virtual std::unique_ptr<Serializer>
-      CreateSerializer(const string& node_name) const = 0;
-
-  // Serializes a property.
-  // Example: <NodeName NodeName:PropertyName="PropertyValue" />
-  virtual bool WriteProperty(const string& name,
-                             const string& value) const = 0;
+      CreateSerializer(const string& node_ns_name,
+                       const string& node_name) const = 0;
 
   // Serializes a property with the given prefix.
   // Example: <NodeName PropertyPrefix:PropertyName="PropertyValue" />
-  virtual bool WriteBoolProperty(const string& name, bool value) const = 0;
-  virtual bool WritePropertyWithPrefix(const string& prefix, const string& name,
-                                       const string& value) const = 0;
+  virtual bool WriteBoolProperty(const string& prefix, const string& name,
+                                 bool value) const = 0;
+  virtual bool WriteProperty(const string& prefix, const string& name,
+                             const string& value) const = 0;
 
   // Serializes the collection of values.
-  virtual bool WriteIntArray(const string& array_name,
+  virtual bool WriteIntArray(const string& prefix, const string& array_name,
                              const std::vector<int>& values) const = 0;
-  virtual bool WriteDoubleArray(const string& array_name,
+  virtual bool WriteDoubleArray(const string& prefix, const string& array_name,
                                 const std::vector<double>& values) const = 0;
 };
 

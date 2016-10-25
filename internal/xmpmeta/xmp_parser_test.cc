@@ -1,31 +1,16 @@
-// xmpmeta. A fast XMP metadata parsing and writing library.
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2016 The XMPMeta Authors. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// * Redistributions of source code must retain the above copyright notice,
-//   this list of conditions and the following disclaimer.
-// * Redistributions in binary form must reproduce the above copyright notice,
-//   this list of conditions and the following disclaimer in the documentation
-//   and/or other materials provided with the distribution.
-// * Neither the name of Google Inc. nor the names of its contributors may be
-//   used to endorse or promote products derived from this software without
-//   specific prior written permission.
+//      http://www.apache.org/licenses/LICENSE-2.0
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// Author: miraleung@google.com (Mira Leung)
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "xmpmeta/xmp_parser.h"
 
@@ -140,7 +125,7 @@ TEST(XmpParser, ReadValidStandardXmp) {
 
   string value;
   xmlNodePtr node = GetFirstDescriptionElement(xmp_data.StandardSection());
-  DeserializerImpl deserializer(XmlConst::RdfDescription(), node);
+  DeserializerImpl deserializer(node);
   ASSERT_TRUE(deserializer.ParseString("GImage", "Mime", &value));
   ASSERT_EQ(string("image/jpeg"), value);
 }
@@ -157,7 +142,7 @@ TEST(XmpParser, ReadValidStandardXmpFromMemoryStream) {
 
   string value;
   xmlNodePtr node = GetFirstDescriptionElement(xmp_data.StandardSection());
-  DeserializerImpl deserializer(XmlConst::RdfDescription(), node);
+  DeserializerImpl deserializer(node);
   ASSERT_TRUE(deserializer.ParseString("GImage", "Mime", &value));
   ASSERT_EQ(string("image/jpeg"), value);
 }
@@ -174,7 +159,7 @@ TEST(XmpParser, ReadValidAltXmpFromMemoryStream) {
 
   string value;
   xmlNodePtr std_node = GetFirstDescriptionElement(xmp_data.StandardSection());
-  DeserializerImpl deserializer(XmlConst::RdfDescription(), std_node);
+  DeserializerImpl deserializer(std_node);
   ASSERT_TRUE(deserializer.ParseString("GImage", "Mime", &value));
   ASSERT_EQ(string("image/jpeg"), value);
 }
@@ -205,9 +190,8 @@ TEST(XmpParser, ReadBooleanProperty) {
   string property("Property");
   xmlNodePtr node = GetFirstDescriptionElement(xmp_data.StandardSection());
   // Read camel case.
-  DeserializerImpl camel_case_deserializer(XmlConst::RdfDescription(),
-                                           GetFirstDescriptionElement(
-                                               xmp_data.StandardSection()));
+  DeserializerImpl camel_case_deserializer(
+      GetFirstDescriptionElement(xmp_data.StandardSection()));
   ASSERT_TRUE(camel_case_deserializer.ParseBoolean(prefix, property, &value));
   ASSERT_TRUE(value);
 
@@ -220,9 +204,8 @@ TEST(XmpParser, ReadBooleanProperty) {
 
   ASSERT_TRUE(ReadXmpHeader(filename, true, &xmp_data));
   node = GetFirstDescriptionElement(xmp_data.StandardSection());
-  DeserializerImpl uppercase_deserializer(XmlConst::RdfDescription(),
-                                          GetFirstDescriptionElement(
-                                              xmp_data.StandardSection()));
+  DeserializerImpl uppercase_deserializer(
+      GetFirstDescriptionElement(xmp_data.StandardSection()));
   ASSERT_TRUE(uppercase_deserializer.ParseBoolean(prefix, property, &value));
   ASSERT_TRUE(value);
 
@@ -235,9 +218,8 @@ TEST(XmpParser, ReadBooleanProperty) {
 
   ASSERT_TRUE(ReadXmpHeader(filename, true, &xmp_data));
   node = GetFirstDescriptionElement(xmp_data.StandardSection());
-  DeserializerImpl lowercase_deserializer(XmlConst::RdfDescription(),
-                                          GetFirstDescriptionElement(
-                                              xmp_data.StandardSection()));
+  DeserializerImpl lowercase_deserializer(
+      GetFirstDescriptionElement(xmp_data.StandardSection()));
   ASSERT_TRUE(lowercase_deserializer.ParseBoolean(prefix, property, &value));
   ASSERT_TRUE(value);
 
@@ -251,7 +233,7 @@ TEST(XmpParser, ReadBooleanProperty) {
   ASSERT_TRUE(ReadXmpHeader(filename, true, &xmp_data));
   node = GetFirstDescriptionElement(xmp_data.StandardSection());
 
-  DeserializerImpl value_deserializer(XmlConst::RdfDescription(), node);
+  DeserializerImpl value_deserializer(node);
   ASSERT_TRUE(value_deserializer.ParseBoolean(prefix, property, &value));
   ASSERT_FALSE(value);
 }
@@ -277,9 +259,8 @@ TEST(XmpParser, ReadExtendedXmp) {
   ASSERT_TRUE(ReadXmpHeader(filename, false, &xmp_data));
 
   string value;
-  DeserializerImpl deserializer(XmlConst::RdfDescription(),
-                                GetFirstDescriptionElement(
-                                    xmp_data.ExtendedSection()));
+  DeserializerImpl deserializer(
+      GetFirstDescriptionElement(xmp_data.ExtendedSection()));
   ASSERT_TRUE(deserializer.ParseString("GImage", "Data", &value));
   ASSERT_EQ(string("9865"), value);
 }

@@ -5,11 +5,15 @@
   'target_defaults': {
     'include_dirs' : [
       '<(xmpmeta_dir)/external',
+      '<(xmpmeta_dir)/external/miniglog',
     ],
   },
   'targets': [
     {
-      'target_name': 'strings',
+      'target_name': 'xmpmeta_strings',
+      'dependencies': [
+        '<(xmpmeta_dir)/external/miniglog/glog/glog.gyp:xmpmeta_glog',
+      ],
       'type': 'static_library',
       'sources': [
         'ascii_ctype.cc',

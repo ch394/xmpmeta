@@ -1,31 +1,16 @@
-// xdmlib. A fast XDM parsing and writing library.
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2016 The XMPMeta Authors. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// * Redistributions of source code must retain the above copyright notice,
-//   this list of conditions and the following disclaimer.
-// * Redistributions in binary form must reproduce the above copyright notice,
-//   this list of conditions and the following disclaimer in the documentation
-//   and/or other materials provided with the distribution.
-// * Neither the name of Google Inc. nor the names of its contributors may be
-//   used to endorse or promote products derived from this software without
-//   specific prior written permission.
+//      http://www.apache.org/licenses/LICENSE-2.0
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// Author: miraleung@google.com (Mira Leung)
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "xdmlib/device.h"
 
@@ -40,6 +25,7 @@
 #include "xdmlib/audio.h"
 #include "xdmlib/camera.h"
 #include "xdmlib/cameras.h"
+#include "xdmlib/const.h"
 #include "xdmlib/device_pose.h"
 #include "xdmlib/profile.h"
 #include "xdmlib/profiles.h"
@@ -59,7 +45,6 @@ using xmpmeta::xml::Deserializer;
 using xmpmeta::xml::DeserializerImpl;
 using xmpmeta::xml::GetFirstDescriptionElement;
 using xmpmeta::xml::Serializer;
-using xmpmeta::xml::SerializerImpl;
 using xmpmeta::xml::ToXmlChar;
 using xmpmeta::xml::XmlConst;
 using xmpmeta::xml::XmlDocToString;
@@ -67,8 +52,6 @@ using xmpmeta::xml::XmlDocToString;
 namespace xmpmeta {
 namespace xdm {
 namespace {
-
-const char kNodeName[] = "Device";
 
 // Test data constants.
 const char kDeviceDataPath[] = "xdm/device_testdata.txt";
@@ -241,14 +224,14 @@ TEST(Device, ReadMetadata) {
       GetFirstDescriptionElement(xmp_data->ExtendedSection());
 
   // XDM Device node.
-  xmlNsPtr device_ns = NewNs("http://fakeh.ref", kNodeName);
-  xmlNodePtr device_node = NewNode(device_ns, kNodeName);
+  xmlNsPtr device_ns = NewNs("http://fakeh.ref", XdmConst::Device());
+  xmlNodePtr device_node = NewNode(device_ns, XdmConst::Device());
   xmlAddChild(description_node, device_node);
   xmlSetNsProp(device_node, device_ns, ToXmlChar("Revision"),
                ToXmlChar("1.01"));
 
   // Device:DevicePose node.
-  xmlNodePtr pose_node = NewNode(nullptr, "DevicePose");
+  xmlNodePtr pose_node = NewNode(device_ns, "DevicePose");
   xmlAddChild(device_node, pose_node);
   xmlNsPtr pose_ns = NewNs("http://fakeh.ref", "DevicePose");
   xmlSetNsProp(pose_node, pose_ns, ToXmlChar("Latitude"), ToXmlChar("1.5"));
@@ -256,7 +239,7 @@ TEST(Device, ReadMetadata) {
   xmlSetNsProp(pose_node, pose_ns, ToXmlChar("Altitude"), ToXmlChar("-1"));
 
   // Device:Cameras node.
-  xmlNodePtr cameras_node = NewNode(nullptr, "Cameras");
+  xmlNodePtr cameras_node = NewNode(device_ns, "Cameras");
   xmlAddChild(device_node, cameras_node);
 
   // rdf:Seq node.
@@ -272,9 +255,10 @@ TEST(Device, ReadMetadata) {
 
   int num_cameras = 3;
   xmlNsPtr audio_ns = NewNs(audio_ns_href, "Audio");
+  xmlNsPtr camera_ns = NewNs("http://fakeh.ref", XdmConst::Camera());
   for (int i = 0; i < num_cameras; i++) {
-    xmlNodePtr camera_node = NewNode(nullptr, "Camera");
-    xmlNodePtr audio_node = NewNode(nullptr, "Audio");
+    xmlNodePtr camera_node = NewNode(device_ns, "Camera");
+    xmlNodePtr audio_node = NewNode(camera_ns, "Audio");
     xmlSetNsProp(audio_node, audio_ns, ToXmlChar("Mime"),
                  ToXmlChar(audio_mime));
     xmlSetNsProp(audio_node, audio_ns, ToXmlChar("Data"),
@@ -318,8 +302,9 @@ TEST(Device, ReadMetadata) {
   }
 
   xmlFreeNs(audio_ns);
-  xmlFreeNs(pose_ns);
+  xmlFreeNs(camera_ns);
   xmlFreeNs(device_ns);
+  xmlFreeNs(pose_ns);
   xmlFreeNs(rdf_ns);
 }
 

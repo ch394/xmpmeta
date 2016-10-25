@@ -1,37 +1,23 @@
-// xdmlib. A fast XDM parsing and writing library.
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2016 The XMPMeta Authors. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// * Redistributions of source code must retain the above copyright notice,
-//   this list of conditions and the following disclaimer.
-// * Redistributions in binary form must reproduce the above copyright notice,
-//   this list of conditions and the following disclaimer in the documentation
-//   and/or other materials provided with the distribution.
-// * Neither the name of Google Inc. nor the names of its contributors may be
-//   used to endorse or promote products derived from this software without
-//   specific prior written permission.
+//      http://www.apache.org/licenses/LICENSE-2.0
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// Author: miraleung@google.com (Mira Leung)
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "xdmlib/device.h"
 
 #include <libxml/tree.h>
 
 #include "glog/logging.h"
+#include "xdmlib/const.h"
 #include "xmpmeta/xml/const.h"
 #include "xmpmeta/xml/deserializer_impl.h"
 #include "xmpmeta/xml/search.h"
@@ -52,8 +38,6 @@ namespace xmpmeta {
 namespace xdm {
 namespace {
 
-const char kDevicePose[] = "DevicePose";
-const char kPropertyPrefix[] = "Device";
 const char kRevision[] = "Revision";
 const char kNamespaceHref[] = "http://ns.xdm.org/photos/1.0/device/";
 
@@ -61,13 +45,6 @@ const char kNamespaceHref[] = "http://ns.xdm.org/photos/1.0/device/";
 
 // Private constructor.
 Device::Device() {}
-
-// Public methods.
-Device::~Device() {
-  for (const auto& entry : prefixes_) {
-    xmlFreeNs(entry.second);
-  }
-}
 
 std::unique_ptr<Device> Device::FromData(
     const string& revision,
@@ -115,7 +92,7 @@ const Profiles* Device::GetProfiles() const { return profiles_.get(); }
 
 // This cannot be const because of memory management for the namespaces.
 // namespaces_ are freed when the XML document(s) in xmp are freed.
-// If namespaces_ and prefixes_ are populated at object creation time and this
+// If namespaces_ are populated at object creation time and this
 // object is serialized, freeing the xmlNs objects in the destructor will result
 // memory management errors.
 bool Device::SerializeToXmp(XmpData* xmp) {
@@ -134,10 +111,10 @@ bool Device::SerializeToXmp(XmpData* xmp) {
 
   // Create a node here instead of through a new deserializer, otherwise
   // an extraneous prefix will be written to the node name.
-  xmlNodePtr device_node = xmlNewNode(nullptr, ToXmlChar(kPropertyPrefix));
+  xmlNodePtr device_node = xmlNewNode(nullptr, ToXmlChar(XdmConst::Device()));
   xmlAddChild(root_node, device_node);
 
-  PopulateNamespacesAndPrefixes();
+  PopulateNamespaces();
   xmlNsPtr prev_ns = root_node->ns;
   for (const auto& entry : namespaces_) {
     if (prev_ns != nullptr) {
@@ -147,18 +124,20 @@ bool Device::SerializeToXmp(XmpData* xmp) {
   }
 
   // Set up serialization on the first description node in the extended section.
-  SerializerImpl device_serializer(namespaces_, prefixes_, kPropertyPrefix,
-                                   device_node);
+  SerializerImpl device_serializer(namespaces_, device_node);
 
   // Serialize fields.
-  if (!device_serializer.WriteProperty(kRevision, revision_)) {
+  if (!device_serializer.WriteProperty(XdmConst::Device(), kRevision,
+                                       revision_)) {
     return false;
   }
 
   // Serialize elements.
   if (device_pose_) {
     std::unique_ptr<Serializer> pose_serializer =
-        device_serializer.CreateSerializer(kDevicePose);
+        device_serializer.CreateSerializer(
+            XdmConst::Namespace(XdmConst::DevicePose()),
+            XdmConst::DevicePose());
     if (!device_pose_->Serialize(pose_serializer.get())) {
       return false;
     }
@@ -182,8 +161,8 @@ void Device::GetNamespaces(
     LOG(ERROR) << "Namespace list is null";
     return;
   }
-  ns_name_href_map->emplace(XmlConst::RdfPrefix(), "");
-  ns_name_href_map->emplace(kPropertyPrefix, kNamespaceHref);
+  ns_name_href_map->emplace(XmlConst::RdfPrefix(), XmlConst::RdfNodeNs());
+  ns_name_href_map->emplace(XdmConst::Device(), kNamespaceHref);
   if (device_pose_) {
     device_pose_->GetNamespaces(ns_name_href_map);
   }
@@ -205,13 +184,13 @@ bool Device::ParseFields(const XmpData& xmp) {
   // Only these two fields are required to be present; the rest are optional.
   // TODO(miraleung): Search for Device by namespace.
   xmlNodePtr device_node =
-      DepthFirstSearch(xmp.ExtendedSection(), kPropertyPrefix);
+      DepthFirstSearch(xmp.ExtendedSection(), XdmConst::Device());
   if (device_node == nullptr) {
     LOG(ERROR) << "No device node found";
     return false;
   }
-  const DeserializerImpl deserializer(kPropertyPrefix, device_node);
-  if (!deserializer.ParseString(kRevision, &revision_)) {
+  const DeserializerImpl deserializer(device_node);
+  if (!deserializer.ParseString(XdmConst::Device(), kRevision, &revision_)) {
     return false;
   }
 
@@ -223,20 +202,15 @@ bool Device::ParseFields(const XmpData& xmp) {
   return true;
 }
 
-// Gathers all the namespaces and prefixes of child elements.
-void Device::PopulateNamespacesAndPrefixes() {
+// Gathers all the XML namespaces of child elements.
+void Device::PopulateNamespaces() {
   std::unordered_map<string, string> ns_name_href_map;
   GetNamespaces(&ns_name_href_map);
   for (const auto& entry : ns_name_href_map) {
-    if (namespaces_.count(entry.first) == 0 && !entry.second.empty()) {
+    if (!namespaces_.count(entry.first)) {
       namespaces_.emplace(entry.first,
                           xmlNewNs(nullptr, ToXmlChar(entry.second.data()),
                                    ToXmlChar(entry.first.data())));
-    }
-    if (prefixes_.count(entry.first) == 0) {
-      prefixes_.emplace(entry.first,
-                        xmlNewNs(nullptr, nullptr,
-                                 ToXmlChar(entry.first.data())));
     }
   }
 }

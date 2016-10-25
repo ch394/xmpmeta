@@ -1,37 +1,23 @@
-// xdmlib. A fast XDM parsing and writing library.
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2016 The XMPMeta Authors. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// * Redistributions of source code must retain the above copyright notice,
-//   this list of conditions and the following disclaimer.
-// * Redistributions in binary form must reproduce the above copyright notice,
-//   this list of conditions and the following disclaimer in the documentation
-//   and/or other materials provided with the distribution.
-// * Neither the name of Google Inc. nor the names of its contributors may be
-//   used to endorse or promote products derived from this software without
-//   specific prior written permission.
+//      http://www.apache.org/licenses/LICENSE-2.0
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// Author: miraleung@google.com (Mira Leung)
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "xdmlib/camera_pose.h"
 
 #include <math.h>
 
 #include "glog/logging.h"
+#include "xdmlib/const.h"
 
 using xmpmeta::xml::Deserializer;
 using xmpmeta::xml::Serializer;
@@ -40,7 +26,6 @@ namespace xmpmeta {
 namespace xdm {
 namespace {
 
-const char kPropertyPrefix[] = "CameraPose";
 const char kPositionX[] = "PositionX";
 const char kPositionY[] = "PositionY";
 const char kPositionZ[] = "PositionZ";
@@ -76,7 +61,7 @@ void CameraPose::GetNamespaces(
     LOG(ERROR) << "Namespace list or own namespace is null";
     return;
   }
-  ns_name_href_map->emplace(kPropertyPrefix, kNamespaceHref);
+  ns_name_href_map->emplace(XdmConst::CameraPose(), kNamespaceHref);
 }
 
 std::unique_ptr<CameraPose>
@@ -107,7 +92,8 @@ CameraPose::FromData(const std::vector<double>& position,
 std::unique_ptr<CameraPose>
 CameraPose::FromDeserializer(const Deserializer& parent_deserializer) {
   std::unique_ptr<Deserializer> deserializer =
-      parent_deserializer.CreateDeserializer(kPropertyPrefix);
+      parent_deserializer.CreateDeserializer(
+          XdmConst::Namespace(XdmConst::CameraPose()), XdmConst::CameraPose());
   if (deserializer == nullptr) {
     return nullptr;
   }
@@ -143,25 +129,29 @@ bool CameraPose::Serialize(Serializer* serializer) const {
   bool success = true;
   if (position_.size() == 3) {
     success &=
-        serializer->WriteProperty(kPositionX, std::to_string(position_[0])) &&
-        serializer->WriteProperty(kPositionY, std::to_string(position_[1])) &&
-        serializer->WriteProperty(kPositionZ, std::to_string(position_[2]));
+        serializer->WriteProperty(XdmConst::CameraPose(), kPositionX,
+                                  std::to_string(position_[0])) &&
+        serializer->WriteProperty(XdmConst::CameraPose(), kPositionY,
+                                  std::to_string(position_[1])) &&
+        serializer->WriteProperty(XdmConst::CameraPose(), kPositionZ,
+                                  std::to_string(position_[2]));
   }
 
   if (orientation_.size() == 4) {
     success &=
-        serializer->WriteProperty(kRotationAxisX,
+        serializer->WriteProperty(XdmConst::CameraPose(), kRotationAxisX,
                                   std::to_string(orientation_[0])) &&
-        serializer->WriteProperty(kRotationAxisY,
+        serializer->WriteProperty(XdmConst::CameraPose(), kRotationAxisY,
                                   std::to_string(orientation_[1])) &&
-        serializer->WriteProperty(kRotationAxisZ,
+        serializer->WriteProperty(XdmConst::CameraPose(), kRotationAxisZ,
                                   std::to_string(orientation_[2])) &&
-        serializer->WriteProperty(kRotationAngle,
+        serializer->WriteProperty(XdmConst::CameraPose(), kRotationAngle,
                                   std::to_string(orientation_[3]));
   }
 
   if (timestamp_ >= 0) {
-    serializer->WriteProperty(kTimestamp, std::to_string(timestamp_));
+    serializer->WriteProperty(XdmConst::CameraPose(), kTimestamp,
+                              std::to_string(timestamp_));
   }
 
   return success;
@@ -170,27 +160,28 @@ bool CameraPose::Serialize(Serializer* serializer) const {
 // Private methods.
 bool CameraPose::ParseCameraPoseFields(const Deserializer& deserializer) {
   double x, y, z;
+  const string& prefix = XdmConst::CameraPose();
   // If a position field is present, the rest must be as well.
-  if (deserializer.ParseDouble(kPositionX, &x)) {
-    if (!deserializer.ParseDouble(kPositionY, &y)) {
+  if (deserializer.ParseDouble(prefix, kPositionX, &x)) {
+    if (!deserializer.ParseDouble(prefix, kPositionY, &y)) {
       return false;
     }
-    if (!deserializer.ParseDouble(kPositionZ, &z)) {
+    if (!deserializer.ParseDouble(prefix, kPositionZ, &z)) {
       return false;
     }
     position_ = { x, y, z };
   }
 
   // Same for orientation.
-  if (deserializer.ParseDouble(kRotationAxisX, &x)) {
-    if (!deserializer.ParseDouble(kRotationAxisY, &y)) {
+  if (deserializer.ParseDouble(prefix, kRotationAxisX, &x)) {
+    if (!deserializer.ParseDouble(prefix, kRotationAxisY, &y)) {
       return false;
     }
-    if (!deserializer.ParseDouble(kRotationAxisZ, &z)) {
+    if (!deserializer.ParseDouble(prefix, kRotationAxisZ, &z)) {
       return false;
     }
     double angle;
-    if (!deserializer.ParseDouble(kRotationAngle, &angle)) {
+    if (!deserializer.ParseDouble(prefix, kRotationAngle, &angle)) {
       return false;
     }
     std::vector<double> axis_angle = { x, y, z, angle };
@@ -201,7 +192,7 @@ bool CameraPose::ParseCameraPoseFields(const Deserializer& deserializer) {
     return false;
   }
 
-  deserializer.ParseLong(kTimestamp, &timestamp_);
+  deserializer.ParseLong(prefix, kTimestamp, &timestamp_);
   return true;
 }
 

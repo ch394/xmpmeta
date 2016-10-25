@@ -1,33 +1,19 @@
-// xmpmeta. A fast XMP metadata parsing and writing library.
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2016 The XMPMeta Authors. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// * Redistributions of source code must retain the above copyright notice,
-//   this list of conditions and the following disclaimer.
-// * Redistributions in binary form must reproduce the above copyright notice,
-//   this list of conditions and the following disclaimer in the documentation
-//   and/or other materials provided with the distribution.
-// * Neither the name of Google Inc. nor the names of its contributors may be
-//   used to endorse or promote products derived from this software without
-//   specific prior written permission.
+//      http://www.apache.org/licenses/LICENSE-2.0
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
-// Author: miraleung@google.com (Mira Leung)
-
-
+////////////////////////////////////////////////////////////////////////////////
+//
 // Command-line tool for writing the XMP metadata for a VR photo.
 //
 // Example usage (all files in --data_dir):
@@ -64,11 +50,11 @@
 DEFINE_string(data_dir, "", "Directory of input and output data");
 DEFINE_string(left_eye, "", "Left eye image file in --data_dir");
 DEFINE_string(right_eye, "", "Right eye image file in --data_dir");
-DEFINE_string(audio, "", "Audio file (to embed) in --data_dir");
 DEFINE_string(output, "", "Name of output file; overwrites file if it exists");
 
 // Optional PanoMetaData flags.
 // If unspecified, these will default to legal (but perhaps incorrect) values.
+DEFINE_string(audio, "", "Audio file (to embed) in --data_dir");
 DEFINE_double(cropped_left, 0, "PanoMetaData: cropped left");
 DEFINE_double(cropped_top, 0, "PanoMetaData: cropped top");
 DEFINE_double(cropped_width, 0, "PanoMetaData: cropped width");
@@ -135,12 +121,10 @@ int main(int argc, char** argv) {
   QCHECK(!FLAGS_data_dir.empty());
   QCHECK(!FLAGS_left_eye.empty());
   QCHECK(!FLAGS_right_eye.empty());
-  QCHECK(!FLAGS_audio.empty());
   QCHECK(!FLAGS_output.empty());
 
   const string left_filename = file::JoinPath(FLAGS_data_dir, FLAGS_left_eye);
   const string right_filename = file::JoinPath(FLAGS_data_dir, FLAGS_right_eye);
-  const string audio_filename = file::JoinPath(FLAGS_data_dir, FLAGS_audio);
   const string output_filename = file::JoinPath(FLAGS_data_dir, FLAGS_output);
 
   // TODO(miraleung): Add timings.
@@ -148,9 +132,6 @@ int main(int argc, char** argv) {
   PanoMetaData metadata;
   InitializePanoMetaData(left_filename, &metadata);
 
-  string original_audio_data;
-  QCHECK_OK(file::GetContents(audio_filename, &original_audio_data,
-                              file::Defaults()));
   string original_right_data;
   QCHECK_OK(file::GetContents(right_filename, &original_right_data,
                               file::Defaults()));
@@ -159,8 +140,15 @@ int main(int argc, char** argv) {
                               file::Defaults()));
 
   std::unique_ptr<GPano> gpano = GPano::CreateFromData(metadata);
-  std::unique_ptr<GAudio> gaudio =
-      GAudio::CreateFromData(original_audio_data, FLAGS_audio_mime);
+  std::unique_ptr<GAudio> gaudio;
+
+  if (!FLAGS_audio.empty()) {
+    const string audio_filename = file::JoinPath(FLAGS_data_dir, FLAGS_audio);
+    string original_audio_data;
+    QCHECK_OK(file::GetContents(audio_filename, &original_audio_data,
+                                file::Defaults()));
+    gaudio = GAudio::CreateFromData(original_audio_data, FLAGS_audio_mime);
+  }
   std::unique_ptr<GImage> gimage =
       GImage::CreateFromData(original_right_data, FLAGS_right_image_mime);
 

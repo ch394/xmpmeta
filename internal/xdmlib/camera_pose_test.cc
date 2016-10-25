@@ -1,31 +1,16 @@
-// xdmlib. A fast XDM parsing and writing library.
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2016 The XMPMeta Authors. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// * Redistributions of source code must retain the above copyright notice,
-//   this list of conditions and the following disclaimer.
-// * Redistributions in binary form must reproduce the above copyright notice,
-//   this list of conditions and the following disclaimer in the documentation
-//   and/or other materials provided with the distribution.
-// * Neither the name of Google Inc. nor the names of its contributors may be
-//   used to endorse or promote products derived from this software without
-//   specific prior written permission.
+//      http://www.apache.org/licenses/LICENSE-2.0
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// Author: miraleung@google.com (Mira Leung)
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "xdmlib/camera_pose.h"
 
@@ -36,6 +21,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/port.h"
+#include "xdmlib/const.h"
 #include "xmpmeta/file.h"
 #include "xmpmeta/test_util.h"
 #include "xmpmeta/xmp_const.h"
@@ -60,9 +47,7 @@ namespace xmpmeta {
 namespace xdm {
 namespace {
 
-const char kPrefix[] = "CameraPose";
 const char kNamespaceHref[] = "http://ns.xdm.org/photos/1.0/camerapose/";
-const char kParentName[] = "Camera";
 const char kFakeHref[] = "http://notarealh.ref";
 
 const char kTestDataFull[] = "xdm/camera_pose_testdata_full.txt";
@@ -86,20 +71,12 @@ NormalizeAxisAngle(const std::vector<double>& coords) {
 
 std::unordered_map<string, xmlNsPtr> SetupNamespaces() {
   std::unordered_map<string, xmlNsPtr> namespaces;
-  namespaces.emplace(kParentName, xmlNewNs(nullptr, ToXmlChar(kFakeHref),
-                                           ToXmlChar(kParentName)));
-  namespaces.emplace(kPrefix, xmlNewNs(nullptr, ToXmlChar(kFakeHref),
-                                       ToXmlChar(kPrefix)));
+  namespaces.emplace(XdmConst::Camera(), xmlNewNs(nullptr, ToXmlChar(kFakeHref),
+                                           ToXmlChar(XdmConst::Camera())));
+  namespaces.emplace(XdmConst::CameraPose(),
+                     xmlNewNs(nullptr, ToXmlChar(kFakeHref),
+                              ToXmlChar(XdmConst::CameraPose())));
   return namespaces;
-}
-
-std::unordered_map<string, xmlNsPtr> SetupPrefixes() {
-  std::unordered_map<string, xmlNsPtr> prefixes;
-  prefixes.emplace(kParentName,
-                   xmlNewNs(nullptr, nullptr, ToXmlChar(kParentName)));
-  prefixes.emplace(kPrefix,
-                   xmlNewNs(nullptr, nullptr, ToXmlChar(kPrefix)));
-  return prefixes;
 }
 
 void FreeNamespaces(std::unordered_map<string, xmlNsPtr> xml_ns_map) {
@@ -110,7 +87,7 @@ void FreeNamespaces(std::unordered_map<string, xmlNsPtr> xml_ns_map) {
 
 TEST(CameraPose, GetNamespaces) {
   std::unordered_map<string, string> ns_name_href_map;
-  string prefix(kPrefix);
+  string prefix(XdmConst::CameraPose());
 
   double x = -85.32;
   double y = -135.20341;
@@ -229,16 +206,16 @@ TEST(CameraPose, SerializePosition) {
   ASSERT_NE(nullptr, pose);
 
   // Set up XML structure.
-  xmlNodePtr camera_node = xmlNewNode(nullptr, ToXmlChar(kParentName));
+  xmlNodePtr camera_node = xmlNewNode(nullptr, ToXmlChar(XdmConst::Camera()));
   xmlDocPtr xml_doc = xmlNewDoc(ToXmlChar(XmlConst::Version()));
   xmlDocSetRootElement(xml_doc, camera_node);
 
   // Create serializer.
   std::unordered_map<string, xmlNsPtr> namespaces = SetupNamespaces();
-  std::unordered_map<string, xmlNsPtr> prefixes = SetupPrefixes();
-  SerializerImpl serializer(namespaces, prefixes, kParentName, camera_node);
+  SerializerImpl serializer(namespaces, camera_node);
   std::unique_ptr<Serializer> pose_serializer =
-      serializer.CreateSerializer(kPrefix);
+      serializer.CreateSerializer(
+          XdmConst::Namespace(XdmConst::CameraPose()), XdmConst::CameraPose());
   ASSERT_NE(nullptr, pose_serializer);
 
   ASSERT_TRUE(pose->Serialize(pose_serializer.get()));
@@ -250,7 +227,6 @@ TEST(CameraPose, SerializePosition) {
 
   // Clean up.
   FreeNamespaces(namespaces);
-  FreeNamespaces(prefixes);
   xmlFreeDoc(xml_doc);
 }
 
@@ -266,16 +242,16 @@ TEST(CameraPose, SerializeOrientation) {
   ASSERT_NE(nullptr, pose);
 
   // Set up XML structure.
-  xmlNodePtr camera_node = xmlNewNode(nullptr, ToXmlChar(kParentName));
+  xmlNodePtr camera_node = xmlNewNode(nullptr, ToXmlChar(XdmConst::Camera()));
   xmlDocPtr xml_doc = xmlNewDoc(ToXmlChar(XmlConst::Version()));
   xmlDocSetRootElement(xml_doc, camera_node);
 
   // Create serializer.
   std::unordered_map<string, xmlNsPtr> namespaces = SetupNamespaces();
-  std::unordered_map<string, xmlNsPtr> prefixes = SetupPrefixes();
-  SerializerImpl serializer(namespaces, prefixes, kParentName, camera_node);
+  SerializerImpl serializer(namespaces, camera_node);
   std::unique_ptr<Serializer> pose_serializer =
-      serializer.CreateSerializer(kPrefix);
+      serializer.CreateSerializer(
+          XdmConst::Namespace(XdmConst::CameraPose()), XdmConst::CameraPose());
   ASSERT_NE(nullptr, pose_serializer);
 
   ASSERT_TRUE(pose->Serialize(pose_serializer.get()));
@@ -287,7 +263,6 @@ TEST(CameraPose, SerializeOrientation) {
 
   // Clean up.
   FreeNamespaces(namespaces);
-  FreeNamespaces(prefixes);
   xmlFreeDoc(xml_doc);
 }
 
@@ -311,16 +286,16 @@ TEST(CameraPose, SerializePositionAndOrientation) {
   ASSERT_NE(nullptr, pose);
 
   // Set up XML structure.
-  xmlNodePtr camera_node = xmlNewNode(nullptr, ToXmlChar(kParentName));
+  xmlNodePtr camera_node = xmlNewNode(nullptr, ToXmlChar(XdmConst::Camera()));
   xmlDocPtr xml_doc = xmlNewDoc(ToXmlChar(XmlConst::Version()));
   xmlDocSetRootElement(xml_doc, camera_node);
 
   // Create serializer.
   std::unordered_map<string, xmlNsPtr> namespaces = SetupNamespaces();
-  std::unordered_map<string, xmlNsPtr> prefixes = SetupPrefixes();
-  SerializerImpl serializer(namespaces, prefixes, kParentName, camera_node);
+  SerializerImpl serializer(namespaces, camera_node);
   std::unique_ptr<Serializer> pose_serializer =
-      serializer.CreateSerializer(kPrefix);
+      serializer.CreateSerializer(
+          XdmConst::Namespace(XdmConst::CameraPose()), XdmConst::CameraPose());
   ASSERT_NE(nullptr, pose_serializer);
 
   ASSERT_TRUE(pose->Serialize(pose_serializer.get()));
@@ -332,7 +307,6 @@ TEST(CameraPose, SerializePositionAndOrientation) {
 
   // Clean up.
   FreeNamespaces(namespaces);
-  FreeNamespaces(prefixes);
   xmlFreeDoc(xml_doc);
 }
 
@@ -343,13 +317,17 @@ TEST(CameraPose, ReadMetadataPositionOrientation) {
 
   // Set up the XML structure.
   xmlNodePtr parent_node =
-      xmlNewNode(nullptr, ToXmlChar(kParentName));
+      xmlNewNode(nullptr, ToXmlChar(XdmConst::Camera()));
   xmlAddChild(description_node, parent_node);
 
-  xmlNodePtr pose_node = xmlNewNode(nullptr, ToXmlChar(kPrefix));
+  xmlNsPtr camera_ns =
+      xmlNewNs(nullptr, ToXmlChar("http://fakeh.ref"),
+               ToXmlChar(XdmConst::Namespace(XdmConst::CameraPose()).data()));
+  xmlNodePtr pose_node =
+      xmlNewNode(camera_ns, ToXmlChar(XdmConst::CameraPose()));
   xmlAddChild(parent_node, pose_node);
   xmlNsPtr pose_ns = xmlNewNs(nullptr, ToXmlChar(kNamespaceHref),
-                              ToXmlChar(kPrefix));
+                              ToXmlChar(XdmConst::CameraPose()));
 
   xmlSetNsProp(pose_node, pose_ns, ToXmlChar("PositionX"), ToXmlChar("1.5"));
   xmlSetNsProp(pose_node, pose_ns, ToXmlChar("PositionY"), ToXmlChar("2.5"));
@@ -365,7 +343,7 @@ TEST(CameraPose, ReadMetadataPositionOrientation) {
                ToXmlChar("1.57"));
 
   // Create an CameraPose from the metadata.
-  DeserializerImpl deserializer(kPrefix, description_node);
+  DeserializerImpl deserializer(description_node);
   std::unique_ptr<CameraPose> pose =
       CameraPose::FromDeserializer(deserializer);
   ASSERT_NE(nullptr, pose.get());
@@ -387,6 +365,7 @@ TEST(CameraPose, ReadMetadataPositionOrientation) {
 
   EXPECT_EQ(-1, pose->GetTimestamp());
 
+  xmlFreeNs(camera_ns);
   xmlFreeNs(pose_ns);
 }
 
@@ -397,13 +376,17 @@ TEST(CameraPose, ReadMetadataOrientation) {
 
   // Set up the XML structure.
   xmlNodePtr parent_node =
-      xmlNewNode(nullptr, ToXmlChar(kParentName));
+      xmlNewNode(nullptr, ToXmlChar(XdmConst::Camera()));
   xmlAddChild(description_node, parent_node);
 
-  xmlNodePtr pose_node = xmlNewNode(nullptr, ToXmlChar(kPrefix));
+  xmlNsPtr camera_ns =
+      xmlNewNs(nullptr, ToXmlChar("http://fakeh.ref"),
+               ToXmlChar(XdmConst::Namespace(XdmConst::CameraPose()).data()));
+  xmlNodePtr pose_node =
+      xmlNewNode(camera_ns, ToXmlChar(XdmConst::CameraPose()));
   xmlAddChild(parent_node, pose_node);
   xmlNsPtr pose_ns = xmlNewNs(nullptr, ToXmlChar(kNamespaceHref),
-                              ToXmlChar(kPrefix));
+                              ToXmlChar(XdmConst::CameraPose()));
 
   xmlSetNsProp(pose_node, pose_ns, ToXmlChar("RotationAxisX"),
                ToXmlChar("1.5"));
@@ -417,7 +400,7 @@ TEST(CameraPose, ReadMetadataOrientation) {
                ToXmlChar("1455818790"));
 
   // Create an CameraPose from the metadata.
-  DeserializerImpl deserializer(kPrefix, description_node);
+  DeserializerImpl deserializer(description_node);
   std::unique_ptr<CameraPose> pose =
       CameraPose::FromDeserializer(deserializer);
   ASSERT_NE(nullptr, pose.get());
@@ -433,6 +416,7 @@ TEST(CameraPose, ReadMetadataOrientation) {
 
   ASSERT_EQ(1455818790, pose->GetTimestamp());
 
+  xmlFreeNs(camera_ns);
   xmlFreeNs(pose_ns);
 }
 

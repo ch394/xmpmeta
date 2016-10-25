@@ -1,5 +1,19 @@
 # https://cs.corp.google.com/#google3/devtools/metadata/presubmit.proto
 
+name: "xmpmeta"
+description:
+    "xmpmeta is a portable library for parsing and writing XMP metadata, "
+    "developed at Google. It is now open-sourced."
+
+third_party {
+  url {
+    type: ARCHIVE
+    value: "third_party/xmpmeta"
+  }
+  version: "1.0"
+  last_upgrade_date { year: 2016 month: 3 day: 22 }
+}
+
 presubmit: {
   review_notify: "miraleung"
   review_notify: "tp-cyclops-dev"
@@ -11,6 +25,13 @@ presubmit: {
 
 presubmit: {
   check_tests: {
+    # Main project.
     project: "xmpmeta"
+
+    # Known projects that depend on xmpmeta.
+    project: "vr.cyclops"
+    project: "vr.cyclops.android"
+    project: "vr.cyclops.ios"
+    project: "vr.photos.android"
   }
 }

@@ -1,31 +1,16 @@
-// xmpmeta. A fast XMP metadata parsing and writing library.
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2016 The XMPMeta Authors. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// * Redistributions of source code must retain the above copyright notice,
-//   this list of conditions and the following disclaimer.
-// * Redistributions in binary form must reproduce the above copyright notice,
-//   this list of conditions and the following disclaimer in the documentation
-//   and/or other materials provided with the distribution.
-// * Neither the name of Google Inc. nor the names of its contributors may be
-//   used to endorse or promote products derived from this software without
-//   specific prior written permission.
+//      http://www.apache.org/licenses/LICENSE-2.0
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// Author: miraleung@google.com (Mira Leung)
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "deserializer_impl.h"
 
@@ -61,8 +46,10 @@ bool BoolStringToBool(const string& bool_str, bool* value) {
 
 // Search for an rdf:Seq node, if it hasn't already been set.
 // parent_name is the name of the rdf:Seq node's parent.
-xmlNodePtr FindSeqNode(const xmlNodePtr node, const string& parent_name) {
-  xmlNodePtr parent_node = DepthFirstSearch(node, parent_name.data());
+xmlNodePtr FindSeqNode(const xmlNodePtr node, const string& prefix,
+                       const string& parent_name) {
+  xmlNodePtr parent_node =
+      DepthFirstSearch(node, prefix.data(), parent_name.data());
   if (parent_node == nullptr) {
     LOG(WARNING) << "Node " << parent_name << " not found";
     return nullptr;
@@ -76,11 +63,11 @@ bool GetStringProperty(const xmlNodePtr node, const string& prefix,
   const xmlDocPtr doc = node->doc;
   for (const _xmlAttr* attribute = node->properties;
        attribute != nullptr; attribute = attribute->next) {
-    if (attribute->ns
-        && strcmp(FromXmlChar(attribute->ns->prefix),
-                  prefix.data()) == 0
-        && strcmp(FromXmlChar(attribute->name),
-                  property.data()) == 0) {
+    // If prefix is not empty, then the attribute's namespace must not be null.
+    if (((attribute->ns && !prefix.empty() &&
+         strcmp(FromXmlChar(attribute->ns->prefix), prefix.data()) == 0) ||
+         prefix.empty()) &&
+        strcmp(FromXmlChar(attribute->name), property.data()) == 0) {
       xmlChar* attribute_string =
           xmlNodeListGetString(doc, attribute->children, 1);
       *value = FromXmlChar(attribute_string);
@@ -96,7 +83,7 @@ bool GetStringProperty(const xmlNodePtr node, const string& prefix,
 // E.g. <prefix:node_name>Contents Here</prefix:node_name>
 bool ReadNodeContent(const xmlNodePtr node, const string& prefix,
                      const string& node_name, string* value) {
-  auto* element = DepthFirstSearch(node, node_name.data());
+  auto* element = DepthFirstSearch(node, prefix.data(), node_name.data());
   if (element == nullptr) {
     return false;
   }
@@ -119,8 +106,8 @@ bool ReadStringProperty(const xmlNodePtr node, const string& prefix,
   if (node == nullptr) {
     return false;
   }
-  if (prefix.empty() || property.empty()) {
-    LOG(ERROR) << "Property prefix or name not given";
+  if (property.empty()) {
+    LOG(ERROR) << "Property not given";
     return false;
   }
 
@@ -145,28 +132,29 @@ bool ReadBase64Property(const xmlNodePtr node, const string& prefix,
 
 }  // namespace
 
-DeserializerImpl::DeserializerImpl(const string& node_name,
-                                   const xmlNodePtr node) :
-    node_name_(node_name), node_(node), list_node_(nullptr) {}
+DeserializerImpl::DeserializerImpl(const xmlNodePtr node) : node_(node),
+  list_node_(nullptr) {}
 
 // Public methods.
 std::unique_ptr<Deserializer>
-DeserializerImpl::CreateDeserializer(const string& child_name) const {
+DeserializerImpl::CreateDeserializer(const string& prefix,
+                                     const string& child_name) const {
   if (child_name.empty()) {
     LOG(ERROR) << "Child name is empty";
     return nullptr;
   }
-  xmlNodePtr child_node = DepthFirstSearch(node_, child_name.data());
+  xmlNodePtr child_node =
+      DepthFirstSearch(node_, prefix.data(), child_name.data());
   if (child_node == nullptr) {
     LOG(ERROR) << "Could not find " << child_name << " node";
     return nullptr;
   }
-  return std::unique_ptr<Deserializer>(
-      new DeserializerImpl(child_name, child_node));
+  return std::unique_ptr<Deserializer>(new DeserializerImpl(child_node));
 }
 
 std::unique_ptr<Deserializer>
-DeserializerImpl::CreateDeserializerFromListElementAt(const string& list_name,
+DeserializerImpl::CreateDeserializerFromListElementAt(const string& prefix,
+                                                      const string& list_name,
                                                       int index) const {
   if (index < 0) {
     LOG(ERROR) << "Index must be greater than or equal to zero";
@@ -184,7 +172,7 @@ DeserializerImpl::CreateDeserializerFromListElementAt(const string& list_name,
     std::lock_guard<std::mutex> lock(mtx_);
     if (list_node_ == nullptr ||
         string(FromXmlChar(list_node_->name)) != list_name) {
-      list_node_ = DepthFirstSearch(node_, list_name.data());
+      list_node_ = DepthFirstSearch(node_, prefix.data(), list_name.data());
     }
     return list_node_;
   }();
@@ -203,22 +191,12 @@ DeserializerImpl::CreateDeserializerFromListElementAt(const string& list_name,
   }
   // Return a new Deserializer with the current rdf:li node and the current
   // node name.
-  return std::unique_ptr<Deserializer>(
-      new DeserializerImpl(node_name_, li_node));
-}
-
-
-bool DeserializerImpl::ParseBase64(const string& name, string* value) const {
-  return ParseBase64(node_name_, name, value);
+  return std::unique_ptr<Deserializer>(new DeserializerImpl(li_node));
 }
 
 bool DeserializerImpl::ParseBase64(const string& prefix, const string& name,
                                    string* value) const {
   return ReadBase64Property(node_, prefix, name, value);
-}
-
-bool DeserializerImpl::ParseBoolean(const string& name, bool* value) const {
-  return ParseBoolean(node_name_, name, value);
 }
 
 bool DeserializerImpl::ParseBoolean(const string& prefix, const string& name,
@@ -228,10 +206,6 @@ bool DeserializerImpl::ParseBoolean(const string& prefix, const string& name,
     return false;
   }
   return BoolStringToBool(string_value, value);
-}
-
-bool DeserializerImpl::ParseDouble(const string& name, double* value) const {
-  return ParseDouble(node_name_, name, value);
 }
 
 bool DeserializerImpl::ParseDouble(const string& prefix, const string& name,
@@ -244,10 +218,6 @@ bool DeserializerImpl::ParseDouble(const string& prefix, const string& name,
   return true;
 }
 
-bool DeserializerImpl::ParseInt(const string& name, int* value) const {
-  return ParseInt(node_name_, name, value);
-}
-
 bool DeserializerImpl::ParseInt(const string& prefix, const string& name,
                                 int* value) const {
   string string_value;
@@ -256,11 +226,6 @@ bool DeserializerImpl::ParseInt(const string& prefix, const string& name,
   }
   return SimpleAtoi(string_value, value);
 }
-
-bool DeserializerImpl::ParseLong(const string& name, int64* value) const {
-  return ParseLong(node_name_, name, value);
-}
-
 
 bool DeserializerImpl::ParseLong(const string& prefix, const string& name,
                                  int64* value) const {
@@ -272,19 +237,15 @@ bool DeserializerImpl::ParseLong(const string& prefix, const string& name,
   return true;
 }
 
-bool DeserializerImpl::ParseString(const string& name, string* value) const {
-  return ParseString(node_name_, name, value);
-}
-
-
 bool DeserializerImpl::ParseString(const string& prefix, const string& name,
                                    string* value) const {
   return ReadStringProperty(node_, prefix, name, value);
 }
 
-bool DeserializerImpl::ParseIntArray(const string& list_name,
+bool DeserializerImpl::ParseIntArray(const string& prefix,
+                                     const string& list_name,
                                      std::vector<int>* values) const {
-  xmlNodePtr seq_node = FindSeqNode(node_, list_name);
+  xmlNodePtr seq_node = FindSeqNode(node_, prefix, list_name);
   if (seq_node == nullptr) {
     LOG(ERROR) << "No rdf:Seq node found";
     return false;
@@ -305,9 +266,10 @@ bool DeserializerImpl::ParseIntArray(const string& list_name,
   return true;
 }
 
-bool DeserializerImpl::ParseDoubleArray(const string& list_name,
+bool DeserializerImpl::ParseDoubleArray(const string& prefix,
+                                        const string& list_name,
                                         std::vector<double>* values) const {
-  xmlNodePtr seq_node = FindSeqNode(node_, list_name);
+  xmlNodePtr seq_node = FindSeqNode(node_, prefix, list_name);
   if (seq_node == nullptr) {
     LOG(ERROR) << "No rdf:Seq node found";
     return false;

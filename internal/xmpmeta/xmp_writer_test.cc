@@ -1,31 +1,16 @@
-// xmpmeta. A fast XMP metadata parsing and writing library.
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2016 The XMPMeta Authors. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// * Redistributions of source code must retain the above copyright notice,
-//   this list of conditions and the following disclaimer.
-// * Redistributions in binary form must reproduce the above copyright notice,
-//   this list of conditions and the following disclaimer in the documentation
-//   and/or other materials provided with the distribution.
-// * Neither the name of Google Inc. nor the names of its contributors may be
-//   used to endorse or promote products derived from this software without
-//   specific prior written permission.
+//      http://www.apache.org/licenses/LICENSE-2.0
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// Author: miraleung@google.com (Mira Leung)
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "xmpmeta/xmp_writer.h"
 
@@ -156,10 +141,10 @@ const char kXdmExtensionBody[] =
     "</x:xmpmeta>\n";
 
 // XMP generic test metadata.
-const int kXmpStandardBoilerplateSize = 177;  // No namespaces or properties.
+const int kXmpStandardBoilerplateSize = 190;  // No namespaces or properties.
 // Standard section w/o namespaces or properties, and empty extended section.
-const int kXmpStandardBoilerplateSizeWithExtendedSection = 223;
-const int kXmpExtendedBoilerplateSize = 175;
+const int kXmpStandardBoilerplateSizeWithExtendedSection = 236;
+const int kXmpExtendedBoilerplateSize = 188;
 const char kLargePropertyName[] = "Data";
 
 const string MockPayload(int size) {
@@ -279,11 +264,19 @@ void CheckXmpDescriptionNode(const xmlDocPtr xmp_section) {
             string(FromXmlChar(description_node->name)));
 
   int num_properties = 0;
-  for (xmlAttrPtr attr = description_node->properties; attr != nullptr;
+  xmlAttrPtr attr;
+  for (attr = description_node->properties; attr != nullptr;
       attr = attr->next) {
     num_properties++;
   }
-  ASSERT_EQ(0, num_properties);
+  // Only the rdf:about property should be present.
+  ASSERT_EQ(1, num_properties);
+  attr = description_node->properties;
+  ASSERT_NE(nullptr, attr);
+  ASSERT_EQ(XmlConst::RdfAbout(), string(FromXmlChar(attr->name)));
+  ASSERT_NE(nullptr, attr->ns);
+  ASSERT_NE(nullptr, attr->ns->prefix);
+  ASSERT_EQ(XmlConst::RdfPrefix(), string(FromXmlChar(attr->ns->prefix)));
 
   // rdf:Description has a namespace.
   ASSERT_NE(nullptr, description_node->ns);
@@ -333,9 +326,8 @@ TEST(XmpWriter, WriteValidStandardXmp) {
 
   // Check that it was initialized with the expected data.
   string value;
-  DeserializerImpl deserializer(XmlConst::RdfDescription(),
-                                GetFirstDescriptionElement(
-                                    xmp_data.StandardSection()));
+  DeserializerImpl deserializer(
+      GetFirstDescriptionElement(xmp_data.StandardSection()));
   ASSERT_TRUE(deserializer.ParseString(kPrefix, kMimeName, &value));
   ASSERT_EQ(string(kMimeValue), value);
 
@@ -349,9 +341,8 @@ TEST(XmpWriter, WriteValidStandardXmp) {
   // Read the XMP back in.
   XmpData new_xmp_data;
   ASSERT_TRUE(ReadXmpHeader(out_filename, true, &new_xmp_data));
-  DeserializerImpl new_deserializer(XmlConst::RdfDescription(),
-                                    GetFirstDescriptionElement(
-                                        xmp_data.StandardSection()));
+  DeserializerImpl new_deserializer(
+      GetFirstDescriptionElement(xmp_data.StandardSection()));
   ASSERT_TRUE(new_deserializer.ParseString(kPrefix, kMimeName, &value));
   ASSERT_EQ(string(kMimeValue), value);
   ASSERT_TRUE(deserializer.ParseString("xmpNote", "HasExtendedXMP", &value));
@@ -372,9 +363,8 @@ TEST(XmpWriter, WriteExtendedXmp) {
 
   // Check that it was initialized with the expected data.
   string value;
-  DeserializerImpl deserializer(XmlConst::RdfDescription(),
-                                GetFirstDescriptionElement(
-                                    xmp_data.ExtendedSection()));
+  DeserializerImpl deserializer(
+      GetFirstDescriptionElement(xmp_data.ExtendedSection()));
   ASSERT_TRUE(deserializer.ParseString(kPrefix, kDataName, &value));
   ASSERT_EQ(string(kDataValue), value);
 
@@ -388,9 +378,8 @@ TEST(XmpWriter, WriteExtendedXmp) {
   // Read the XMP back in.
   XmpData new_xmp_data;
   ASSERT_TRUE(ReadXmpHeader(out_filename, false, &new_xmp_data));
-  DeserializerImpl new_deserializer(XmlConst::RdfDescription(),
-                                    GetFirstDescriptionElement(
-                                        xmp_data.ExtendedSection()));
+  DeserializerImpl new_deserializer(
+      GetFirstDescriptionElement(xmp_data.ExtendedSection()));
   ASSERT_TRUE(new_deserializer.ParseString(kPrefix, kDataName, &value));
   ASSERT_EQ(string(kDataValue), value);
   const string std_section_data_path =
@@ -425,9 +414,8 @@ TEST(XmpWriter, WriteExtendedXmpMultipleSections) {
 
   // Check that it was initialized with the expected data.
   string value;
-  DeserializerImpl deserializer(XmlConst::RdfDescription(),
-                                GetFirstDescriptionElement(
-                                    xmp_data.ExtendedSection()));
+  DeserializerImpl deserializer(
+      GetFirstDescriptionElement(xmp_data.ExtendedSection()));
   ASSERT_TRUE(deserializer.ParseString(device_prefix, revision_name, &value));
   ASSERT_EQ(string(xdm_revision), value);
   ASSERT_TRUE(deserializer.ParseString(device_prefix, container_signature_name,
@@ -444,9 +432,8 @@ TEST(XmpWriter, WriteExtendedXmpMultipleSections) {
   // Read the XMP back in.
   XmpData new_xmp_data;
   ASSERT_TRUE(ReadXmpHeader(out_filename, false, &new_xmp_data));
-  DeserializerImpl new_deserializer(XmlConst::RdfDescription(),
-                                    GetFirstDescriptionElement(
-                                        new_xmp_data.ExtendedSection()));
+  DeserializerImpl new_deserializer(
+      GetFirstDescriptionElement(new_xmp_data.ExtendedSection()));
   ASSERT_TRUE(new_deserializer.ParseString(device_prefix, revision_name,
                                            &value));
   ASSERT_EQ(xdm_revision, value);

@@ -1,36 +1,22 @@
-// xdmlib. A fast XDM parsing and writing library.
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2016 The XMPMeta Authors. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// * Redistributions of source code must retain the above copyright notice,
-//   this list of conditions and the following disclaimer.
-// * Redistributions in binary form must reproduce the above copyright notice,
-//   this list of conditions and the following disclaimer in the documentation
-//   and/or other materials provided with the distribution.
-// * Neither the name of Google Inc. nor the names of its contributors may be
-//   used to endorse or promote products derived from this software without
-//   specific prior written permission.
+//      http://www.apache.org/licenses/LICENSE-2.0
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// Author: miraleung@google.com (Mira Leung)
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "xdmlib/point_cloud.h"
 
 #include "glog/logging.h"
 #include "strings/numbers.h"
+#include "xdmlib/const.h"
 #include "xmpmeta/base64.h"
 #include "xmpmeta/xml/utils.h"
 
@@ -85,7 +71,8 @@ PointCloud::FromData(int count, const string& position, const string& color,
 std::unique_ptr<PointCloud>
 PointCloud::FromDeserializer(const Deserializer& parent_deserializer) {
   std::unique_ptr<Deserializer> deserializer =
-      parent_deserializer.CreateDeserializer(kPropertyPrefix);
+      parent_deserializer.CreateDeserializer(
+          XdmConst::Namespace(kPropertyPrefix), kPropertyPrefix);
   if (deserializer == nullptr) {
     return nullptr;
   }
@@ -116,27 +103,31 @@ bool PointCloud::Serialize(Serializer* serializer) const {
   }
 
   // Write required fields.
-  if (count_ < 0 || !serializer->WriteProperty(kCount, SimpleItoa(count_))) {
+  if (count_ < 0 || !serializer->WriteProperty(XdmConst::PointCloud(), kCount,
+                                               SimpleItoa(count_))) {
     return false;
   }
-  if (!serializer->WriteProperty(kPosition, base64_encoded_position)) {
+  if (!serializer->WriteProperty(XdmConst::PointCloud(), kPosition,
+                                 base64_encoded_position)) {
     return false;
   }
 
   // Write optional fields.
-  serializer->WriteBoolProperty(kMetric, metric_);
+  serializer->WriteBoolProperty(XdmConst::PointCloud(), kMetric,
+                                metric_);
 
   if (!color_.empty()) {
     string base64_encoded_color;
     if (!EncodeBase64(color_, &base64_encoded_color)) {
       LOG(ERROR) << "Base64 encoding of color failed";
     } else {
-      serializer->WriteProperty(kColor, base64_encoded_color);
+      serializer->WriteProperty(XdmConst::PointCloud(), kColor,
+                                base64_encoded_color);
     }
   }
 
   if (!software_.empty()) {
-    serializer->WriteProperty(kSoftware, software_);
+    serializer->WriteProperty(XdmConst::PointCloud(), kSoftware, software_);
   }
   return true;
 }
@@ -144,20 +135,21 @@ bool PointCloud::Serialize(Serializer* serializer) const {
 // Private methods.
 bool PointCloud::ParseFields(const Deserializer& deserializer) {
   // Required fields.
-  if (!deserializer.ParseInt(kCount, &count_)) {
+  if (!deserializer.ParseInt(XdmConst::PointCloud(), kCount, &count_)) {
     return false;
   }
-  if (!deserializer.ParseBase64(kPosition, &position_)) {
+  if (!deserializer.ParseBase64(XdmConst::PointCloud(), kPosition,
+                                &position_)) {
     return false;
   }
 
   // Optional fields.
-  if (!deserializer.ParseBoolean(kMetric, &metric_)) {
+  if (!deserializer.ParseBoolean(XdmConst::PointCloud(), kMetric, &metric_)) {
     // Set it to the default value.
     metric_ = false;
   }
-  deserializer.ParseBase64(kColor, &color_);
-  deserializer.ParseString(kSoftware, &software_);
+  deserializer.ParseBase64(XdmConst::PointCloud(), kColor, &color_);
+  deserializer.ParseString(XdmConst::PointCloud(), kSoftware, &software_);
   return true;
 }
 

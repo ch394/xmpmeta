@@ -1,31 +1,16 @@
-// xmpmeta. A fast XMP metadata parsing and writing library.
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2016 The XMPMeta Authors. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// * Redistributions of source code must retain the above copyright notice,
-//   this list of conditions and the following disclaimer.
-// * Redistributions in binary form must reproduce the above copyright notice,
-//   this list of conditions and the following disclaimer in the documentation
-//   and/or other materials provided with the distribution.
-// * Neither the name of Google Inc. nor the names of its contributors may be
-//   used to endorse or promote products derived from this software without
-//   specific prior written permission.
+//      http://www.apache.org/licenses/LICENSE-2.0
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// Author: miraleung@google.com (Mira Leung)
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "xmpmeta/jpeg_io.h"
 
@@ -38,6 +23,7 @@
 #include "xmpmeta/file.h"
 #include "xmpmeta/test_util.h"
 #include "xmpmeta/test_xmp_creator.h"
+#include "xmpmeta/xmp_const.h"
 
 namespace xmpmeta {
 namespace {
@@ -86,7 +72,9 @@ TEST(JpegIO, ParseStandardXmp) {
 
   std::ifstream file(filename.c_str(), std::ios::binary);
   ASSERT_TRUE(file.is_open());
-  const std::vector<Section> sections = Parse(&file, true, "");
+  ParseOptions parse_options;
+  parse_options.read_meta_only = true;
+  const std::vector<Section> sections = Parse(parse_options, &file);
   EXPECT_FALSE(sections.empty());
   for (const auto& section : sections) {
     EXPECT_FALSE(section.is_image_section);
@@ -102,7 +90,9 @@ TEST(JpegIO, ParseMalformedStandardXmp) {
 
   std::ifstream file(filename.c_str(), std::ios::binary);
   ASSERT_TRUE(file.is_open());
-  const std::vector<Section> sections = Parse(&file, true, "");
+  ParseOptions parse_options;
+  parse_options.read_meta_only = true;
+  const std::vector<Section> sections = Parse(parse_options, &file);
   EXPECT_FALSE(sections.empty());
   for (const auto& section : sections) {
     EXPECT_FALSE(section.is_image_section);
@@ -120,11 +110,69 @@ TEST(JpegIO, ParseExtendedXmp) {
 
   std::ifstream file(filename.c_str(), std::ios::binary);
   ASSERT_TRUE(file.is_open());
-  const std::vector<Section> sections = Parse(&file, true, "");
-  EXPECT_FALSE(sections.empty());
+  ParseOptions parse_options;
+  parse_options.read_meta_only = true;
+  const std::vector<Section> sections = Parse(parse_options, &file);
+  EXPECT_EQ(3, sections.size());
   for (const auto& section : sections) {
     EXPECT_FALSE(section.is_image_section);
   }
+}
+
+TEST(JpegIO, ParseOnlyStandardSectionInExtendedXmp) {
+  const string filename = TempFileAbsolutePath("test.jpg");
+  std::vector<string> xmp_sections =
+      TestXmpCreator::CreateExtensionXmpStrings(2, kXmpExtensionHeaderPart2,
+                                                kXmpExtensionBody);
+  xmp_sections.insert(xmp_sections.begin(),
+                      TestXmpCreator::CreateStandardXmpString(kXmpBody));
+  TestXmpCreator::WriteJPEGFile(filename, xmp_sections);
+
+  std::ifstream file(filename.c_str(), std::ios::binary);
+  ASSERT_TRUE(file.is_open());
+  ParseOptions parse_options;
+  parse_options.read_meta_only = true;
+  parse_options.section_header = XmpConst::Header();
+  const std::vector<Section> sections = Parse(parse_options, &file);
+  EXPECT_EQ(1, sections.size());
+  for (const auto& section : sections) {
+    EXPECT_FALSE(section.is_image_section);
+  }
+}
+
+TEST(JpegIO, ParseAllExtendedSections) {
+  const string filename = TempFileAbsolutePath("test.jpg");
+  std::vector<string> xmp_sections =
+      TestXmpCreator::CreateExtensionXmpStrings(2, kXmpExtensionHeaderPart2,
+                                                kXmpExtensionBody);
+  xmp_sections.insert(xmp_sections.begin(),
+                      TestXmpCreator::CreateStandardXmpString(kXmpBody));
+  TestXmpCreator::WriteJPEGFile(filename, xmp_sections);
+
+  std::ifstream file(filename.c_str(), std::ios::binary);
+  ASSERT_TRUE(file.is_open());
+  ParseOptions parse_options;
+  parse_options.read_meta_only = true;
+  parse_options.section_header = XmpConst::ExtensionHeader();
+  EXPECT_EQ(2, Parse(parse_options, &file).size());
+}
+
+TEST(JpegIO, ParseFirstExtendedSection) {
+  const string filename = TempFileAbsolutePath("test.jpg");
+  std::vector<string> xmp_sections =
+      TestXmpCreator::CreateExtensionXmpStrings(2, kXmpExtensionHeaderPart2,
+                                                kXmpExtensionBody);
+  xmp_sections.insert(xmp_sections.begin(),
+                      TestXmpCreator::CreateStandardXmpString(kXmpBody));
+  TestXmpCreator::WriteJPEGFile(filename, xmp_sections);
+
+  std::ifstream file(filename.c_str(), std::ios::binary);
+  ASSERT_TRUE(file.is_open());
+  ParseOptions parse_options;
+  parse_options.read_meta_only = true;
+  parse_options.section_header = XmpConst::ExtensionHeader();
+  parse_options.section_header_return_first = true;
+  EXPECT_EQ(1, Parse(parse_options, &file).size());
 }
 
 TEST(JpegIO, ParseJpegWithExtendedXmpReadMetaOnly) {
@@ -132,7 +180,9 @@ TEST(JpegIO, ParseJpegWithExtendedXmpReadMetaOnly) {
   std::ifstream file(filename.c_str(), std::ios::binary);
 
   ASSERT_TRUE(file.is_open());
-  const std::vector<Section> sections = Parse(&file, true, "");
+  ParseOptions parse_options;
+  parse_options.read_meta_only = true;
+  const std::vector<Section> sections = Parse(parse_options, &file);
   EXPECT_FALSE(sections.empty());
   for (const auto& section : sections) {
     EXPECT_FALSE(section.is_image_section);
@@ -144,7 +194,8 @@ TEST(JpegIO, ParseJpegWithExtendedXmpReadEverything) {
   std::ifstream file(filename.c_str(), std::ios::binary);
 
   ASSERT_TRUE(file.is_open());
-  const std::vector<Section> sections = Parse(&file, false, "");
+  ParseOptions parse_options;
+  const std::vector<Section> sections = Parse(parse_options, &file);
   EXPECT_FALSE(sections.empty());
   for (int i = 0; i < sections.size() - 1; i++) {
     EXPECT_FALSE(sections.at(i).is_image_section);

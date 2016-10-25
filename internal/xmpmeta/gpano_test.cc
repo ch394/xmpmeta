@@ -1,31 +1,16 @@
-// xmpmeta. A fast XMP metadata parsing and writing library.
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2016 The XMPMeta Authors. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// * Redistributions of source code must retain the above copyright notice,
-//   this list of conditions and the following disclaimer.
-// * Redistributions in binary form must reproduce the above copyright notice,
-//   this list of conditions and the following disclaimer in the documentation
-//   and/or other materials provided with the distribution.
-// * Neither the name of Google Inc. nor the names of its contributors may be
-//   used to endorse or promote products derived from this software without
-//   specific prior written permission.
+//      http://www.apache.org/licenses/LICENSE-2.0
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// Author: miraleung@google.com (Mira Leung)
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "xmpmeta/gpano.h"
 
@@ -35,9 +20,12 @@
 #include <libxml/tree.h>
 
 #include "glog/logging.h"
+#include "xmpmeta/file.h"
 #include "xmpmeta/pano_meta_data.h"
 #include "xmpmeta/test_util.h"
+#include "xmpmeta/test_xmp_creator.h"
 #include "xmpmeta/xmp_data.h"
+#include "xmpmeta/xmp_parser.h"
 #include "xmpmeta/xmp_writer.h"
 #include "xmpmeta/xml/const.h"
 #include "xmpmeta/xml/serializer_impl.h"
@@ -58,16 +46,13 @@ const int kFullWidth = 8192;
 const int kFullHeight = 4096;
 const int kInitialHeadingDegrees = 189;
 
-std::unique_ptr<SerializerImpl> CreateSerializer(const XmpData& xmp_data,
-                                                 const xmlNsPtr xml_ns) {
+std::unique_ptr<SerializerImpl>
+    CreateSerializerForTest(const XmpData& xmp_data, const xmlNsPtr xml_ns) {
   std::unordered_map<string, xmlNsPtr> namespaces;
-  // Prefix map can be empty since new nodes will not be created on this
-  // serializer.
-  std::unordered_map<string, xmlNsPtr> prefixes;
   namespaces.emplace("GPano", xml_ns);
   std::unique_ptr<SerializerImpl> serializer =
       SerializerImpl::FromDataAndSerializeNamespaces(
-          namespaces, prefixes, xml::XmlConst::RdfDescription(),
+          namespaces,
           xml::GetFirstDescriptionElement(xmp_data.StandardSection()));
   return serializer;
 }
@@ -110,7 +95,7 @@ TEST(GPano, ToVrPhotoXmp) {
   xmlNsPtr xml_ns =
       xmlNewNs(nullptr, ToXmlChar("http://fakehref.com/"), ToXmlChar("GPano"));
   std::unique_ptr<SerializerImpl> serializer =
-      CreateSerializer(*xmp_data, xml_ns);
+      CreateSerializerForTest(*xmp_data, xml_ns);
   ASSERT_TRUE(new_gpano->Serialize(serializer.get()));
 
   std::unique_ptr<GPano> gpano_from_xmp = GPano::FromXmp(*xmp_data);
@@ -130,6 +115,34 @@ TEST(GPano, ToVrPhotoXmpWithNullSerializer) {
   PanoMetaData new_meta_data;
   std::unique_ptr<GPano> new_gpano = GPano::CreateFromData(new_meta_data);
   ASSERT_FALSE(new_gpano->Serialize(nullptr));
+}
+
+TEST(GPano, ParseXmpTest) {
+  const char kStandardSectionWithAudioData[] =
+      "vr_photo_with_audio_std_section_data.txt";
+  const char kStandardSectionWithoutAudioData[] =
+      "vr_photo_no_audio_std_section_data.txt";
+  const char kPhotoSphereStdSectionData[] = "photo_sphere_std_section_data.txt";
+
+  const vector<string> data_paths = {
+      TestFileAbsolutePath(kStandardSectionWithAudioData),
+      TestFileAbsolutePath(kStandardSectionWithoutAudioData),
+      TestFileAbsolutePath(kPhotoSphereStdSectionData)};
+
+  for (const string& data_path : data_paths) {
+    std::string xmp_body;
+    ReadFileToStringOrDie(data_path, &xmp_body);
+
+    const string filename = TempFileAbsolutePath("test.jpg");
+    std::vector<string> standard_xmp;
+    standard_xmp.push_back(TestXmpCreator::CreateStandardXmpString(xmp_body));
+    TestXmpCreator::WriteJPEGFile(filename, standard_xmp);
+
+    XmpData xmp_data;
+    ASSERT_TRUE(ReadXmpHeader(filename, true, &xmp_data));
+    std::unique_ptr<GPano> gpano_from_xmp = GPano::FromXmp(xmp_data);
+    EXPECT_NE(nullptr, gpano_from_xmp) << data_path;
+  }
 }
 
 }  // namespace

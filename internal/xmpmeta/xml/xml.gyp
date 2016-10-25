@@ -1,76 +1,52 @@
 {
   'variables' : {
-    'google3_dir': '<(DEPTH)',
-    'libxml_dir': '<(DEPTH)/third_party/libxml',
-    'meta_dir': '<(DEPTH)/third_party/xmpmeta/internal/xmpmeta',
+    'xmpmeta_dir': '<(DEPTH)/third_party/xmpmeta',
+    'xml_dir': '<(xmpmeta_dir)/internal/xmpmeta/xml',
   },
+
+  'target_defaults': {
+    'type': 'static_library',
+    'conditions': [
+      ['OS=="win"', {
+         'msvs_disabled_warnings': [
+         '4267', # Conversion from size_t to int.
+       ]}
+      ]
+    ],
+  },
+
   'targets': [
     {
-      'target_name': 'const',
-      'type': 'static_library',
-      'sources': [
-        'const.cc',
-      ],
-    }, # const target.
-    {
-      'target_name': 'search',
-      'type': 'static_library',
-      'include_dirs' : [
-        '<(google3_dir)',
-      ],
+      'target_name': 'xml',
       'dependencies': [
-        '<(libxml_dir)/libxml.gyp:libxml',
+        '<(xmpmeta_dir)/internal/xmpmeta/external/strings/strings.gyp:xmpmeta_strings',
+        '<(DEPTH)/third_party/libxml/libxml.gyp:libxml',
+      ],
+      'direct_dependent_settings': {
+        'include_dirs': [
+          '<(DEPTH)',
+          '<(DEPTH)/third_party/libxml/src/include/',
+          '<(xmpmeta_dir)/includes/',
+          '<(xmpmeta_dir)/internal/',
+          '<(xmpmeta_dir)/internal/xmpmeta/external',
+          '<(xmpmeta_dir)/internal/xmpmeta/external/miniglog',
+       ],
+      },
+      'include_dirs': [
+        '<(DEPTH)',
+        '<(DEPTH)/third_party/libxml/src/include/',
+        '<(xmpmeta_dir)/includes/',
+        '<(xmpmeta_dir)/internal/',
+        '<(xmpmeta_dir)/internal/xmpmeta/external',
+        '<(xmpmeta_dir)/internal/xmpmeta/external/miniglog',
       ],
       'sources': [
-        'search.cc',
+        '<(xml_dir)/const.cc',
+        '<(xml_dir)/deserializer_impl.cc',
+        '<(xml_dir)/search.cc',
+        '<(xml_dir)/serializer_impl.cc',
+        '<(xml_dir)/utils.cc',
       ],
-    }, # search target.
-    {
-      'target_name': 'utils',
-      'type': 'static_library',
-      'include_dirs' : [
-        '<(google3_dir)',
-      ],
-      'dependencies': [
-        ':search',
-        ':const',
-      ],
-      'sources': [
-        'utils.cc',
-      ],
-    }, # utils target.
-    {
-      'target_name': 'serializer_impl',
-      'type': 'static_library',
-      'include_dirs' : [
-        '<(meta_dir)/external',
-        '<(google3_dir)',
-      ],
-      'dependencies': [
-        ':const',
-        '<(libxml_dir)/libxml.gyp:libxml',
-        '<(meta_dir)/external/strings/strings.gyp:strings',
-      ],
-      'sources': [
-        'serializer_impl.cc',
-      ],
-    }, # serializer_impl target.
-    {
-      'target_name': 'deserializer_impl',
-      'type': 'static_library',
-      'include_dirs' : [
-        '<(meta_dir)/external',
-        '<(google3_dir)',
-      ],
-      'dependencies': [
-        ':search',
-        ':utils',
-        '<(libxml_dir)/libxml.gyp:libxml',
-        '<(meta_dir)/external/strings/strings.gyp:strings',
-      ],
-      'sources': [
-        'deserializer_impl.cc',
-      ],
-    }, # deserializer_impl target.
+    },
   ],  # targets.
 }

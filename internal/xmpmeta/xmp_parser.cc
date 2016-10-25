@@ -1,31 +1,16 @@
-// xmpmeta. A fast XMP metadata parsing and writing library.
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2016 The XMPMeta Authors. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// * Redistributions of source code must retain the above copyright notice,
-//   this list of conditions and the following disclaimer.
-// * Redistributions in binary form must reproduce the above copyright notice,
-//   this list of conditions and the following disclaimer in the documentation
-//   and/or other materials provided with the distribution.
-// * Neither the name of Google Inc. nor the names of its contributors may be
-//   used to endorse or promote products derived from this software without
-//   specific prior written permission.
+//      http://www.apache.org/licenses/LICENSE-2.0
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// Author: miraleung@google.com (Mira Leung)
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "xmpmeta/xmp_parser.h"
 
@@ -78,8 +63,11 @@ bool ConvertStringPropertyToType(const string& string_property, T* value);
 // Gets the end of the XMP meta content. If there is no packet wrapper, returns
 // data.length, otherwise returns 1 + the position of last '>' without '?'
 // before it. Usually the packet wrapper end is "<?xpacket end="w"?>.
-int GetXmpContentEnd(const string& data) {
-  for (int i = static_cast<int>(data.size() - 1); i >= 1; --i) {
+size_t GetXmpContentEnd(const string& data) {
+  if (data.empty()) {
+    return 0;
+  }
+  for (size_t i = data.size() - 1; i >= 1; --i) {
     if (data[i] == '>') {
       if (data[i - 1] != '?') {
         return i + 1;
@@ -87,7 +75,8 @@ int GetXmpContentEnd(const string& data) {
     }
   }
   // It should not reach here for a valid XMP meta.
-  return static_cast<int>(data.size());
+  LOG(WARNING) << "Failed to find the end of the XMP meta content.";
+  return data.size();
 }
 
 // Parses the first valid XMP section. Any other valid XMP section will be
@@ -96,18 +85,28 @@ bool ParseFirstValidXMPSection(const std::vector<Section>& sections,
                                XmpData* xmp) {
   for (const Section& section : sections) {
     if (HasPrefixString(section.data, XmpConst::Header())) {
-      const int end = GetXmpContentEnd(section.data);
+      const size_t end = GetXmpContentEnd(section.data);
       // Increment header length by 1 for the null termination.
-      const int header_length =
-          static_cast<int>(strlen(XmpConst::Header()) + 1);
-      const int content_length = static_cast<int>(end - header_length);
-      if (content_length <= 0) {
-        LOG(ERROR) << "Invalid content length: " << content_length;
+      const size_t header_length = strlen(XmpConst::Header()) + 1;
+      // Check for integer underflow before subtracting.
+      if (header_length >= end) {
+        LOG(ERROR) << "Invalid content length: "
+                   << static_cast<int>(end - header_length);
         return false;
       }
+      const size_t content_length = end - header_length;
+      // header_length is guaranteed to be <= data.size due to the if condition
+      // above. If this contract changes we must add an additonal check.
       const char* content_start = &section.data[header_length];
+      // xmlReadMemory requires an int. Before casting size_t to int we must
+      // check for integer overflow.
+      if (content_length > INT_MAX) {
+        LOG(ERROR) << "First XMP section too large, size: " << content_length;
+        return false;
+      }
       *xmp->MutableStandardSection() = xmlReadMemory(
-          content_start, content_length, nullptr, nullptr, 0);
+          content_start, static_cast<int>(content_length), nullptr, nullptr,
+          0);
       if (xmp->StandardSection() == nullptr) {
         LOG(WARNING) << "Failed to parse standard section.";
         return false;
@@ -124,6 +123,11 @@ string GetExtendedXmpSections(const std::vector<Section>& sections,
                               const string& section_name) {
   string extended_header = XmpConst::ExtensionHeader();
   extended_header += '\0' + section_name;
+  // section_name is dynamically extracted from the xml file and can have an
+  // arbitrary size. Check for integer overflow before addition.
+  if (extended_header.size() > SIZE_MAX - XmpConst::ExtensionHeaderOffset()) {
+    return "";
+  }
   const size_t section_start_offset =
       extended_header.size() + XmpConst::ExtensionHeaderOffset();
 
@@ -167,6 +171,13 @@ bool ParseExtendedXmpSections(const std::vector<Section>& sections,
                               const string& section_name, XmpData* xmp_data) {
   const string extended_sections =
       GetExtendedXmpSections(sections, section_name);
+  // xmlReadMemory requires an int. Before casting size_t to int we must check
+  // for integer overflow.
+  if (extended_sections.size() > INT_MAX) {
+    LOG(WARNING) << "Extended sections too large, size: "
+                 << extended_sections.size();
+    return false;
+  }
   *xmp_data->MutableExtendedSection() =
       xmlReadMemory(extended_sections.data(),
                     static_cast<int>(extended_sections.size()), nullptr,
@@ -183,8 +194,13 @@ bool ExtractXmpMeta(const bool skip_extended, std::istream* file,
                     XmpData* xmp_data) {
   CHECK_NOTNULL(xmp_data)->Reset();
 
-  const string header(skip_extended ? XmpConst::Header() : "");
-  const std::vector<Section> sections = Parse(file, true, header);
+  ParseOptions parse_options;
+  parse_options.read_meta_only = true;
+  if (skip_extended) {
+    parse_options.section_header = XmpConst::Header();
+    parse_options.section_header_return_first = true;
+  }
+  const std::vector<Section> sections = Parse(parse_options, file);
   if (sections.empty()) {
     LOG(WARNING) << "No sections found.";
     return false;
@@ -198,13 +214,15 @@ bool ExtractXmpMeta(const bool skip_extended, std::istream* file,
     return true;
   }
   string extension_name;
-  DeserializerImpl deserializer(XmlConst::RdfDescription(),
-                                GetFirstDescriptionElement(
-                                    xmp_data->StandardSection()));
+  DeserializerImpl deserializer(
+      GetFirstDescriptionElement(xmp_data->StandardSection()));
   if (!deserializer.ParseString(XmpConst::HasExtensionPrefix(),
-                                XmpConst::HasExtension(), &extension_name) ||
-      !ParseExtendedXmpSections(sections, extension_name, xmp_data)) {
-    LOG(WARNING) << "Could not parse extended sections.";
+                                XmpConst::HasExtension(), &extension_name)) {
+    // No extended sections present, so nothing to parse.
+    return true;
+  }
+  if (!ParseExtendedXmpSections(sections, extension_name, xmp_data)) {
+    LOG(WARNING) << "Extended sections present, but could not be parsed.";
     return false;
   }
   return true;
@@ -301,6 +319,12 @@ bool ReadXmpHeader(const string& filename, const bool skip_extended,
     return false;
   }
   return ExtractXmpMeta(skip_extended, &file, xmp_data);
+}
+
+bool ReadXmpFromMemory(const string& jpeg_contents, const bool skip_extended,
+                       XmpData* xmp_data) {
+  std::istringstream stream(jpeg_contents);
+  return ExtractXmpMeta(skip_extended, &stream, xmp_data);
 }
 
 bool ReadXmpHeader(std::istream* input_stream, bool skip_extended,

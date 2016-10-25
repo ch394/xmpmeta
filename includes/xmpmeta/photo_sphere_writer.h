@@ -27,46 +27,20 @@
 //
 // Author: miraleung@google.com (Mira Leung)
 
-// Functions for doing parsing and writing on JPEG files.
+#ifndef XMPMETA_PHOTO_SPHERE_WRITER_H_
+#define XMPMETA_PHOTO_SPHERE_WRITER_H_
 
-#ifndef XMPMETA_JPEG_IO_H_
-#define XMPMETA_JPEG_IO_H_
+#include <iostream>
+#include <memory>
 
-#include <string>
-#include <vector>
-
-#include "base/port.h"
+#include "xmpmeta/gpano.h"
+#include "xmpmeta/xmp_data.h"
 
 namespace xmpmeta {
 
-// Contains the data for a section in a JPEG file.
-// A JPEG file contains many sections in addition to image data.
-struct Section {
-  // Constructors.
-  Section() = default;
-  explicit Section(const string& buffer);
-
-  // Returns true if the section's marker matches an APP1 marker.
-  bool IsMarkerApp1();
-
-  int marker;
-  bool is_image_section;
-  string data;
-};
-
-// Parses the JPEG image file.
-// If read_meta_only is true, keeps only the EXIF and XMP sections (with
-// marker kApp1) and ignores others. Otherwise, keeps everything including
-// image data.
-// @param section_header The href that comes before an XMP section; ignored
-// if empty.
-std::vector<Section> Parse(std::istream* input_stream, bool read_meta_only,
-                           const string& section_header);
-
-// Writes JPEG data sections to a file.
-void WriteSections(const std::vector<Section>& sections,
-                   std::ostream* output_stream);
+// Writes the Photo Sphere XMP format.
+bool WritePhotoSphereMetaToXmp(const GPano& gpano, XmpData* xmp_data);
 
 }  // namespace xmpmeta
 
-#endif  // XMPMETA_JPEG_IO_H_
+#endif  // XMPMETA_PHOTO_SPHERE_WRITER_H_

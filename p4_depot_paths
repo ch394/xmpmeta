@@ -1,0 +1,8 @@
+# P4 mappings for xmpmeta
+
+# DO NOT delete this path. It is required as a placeholder if the file does
+# not pull in any other paths.
+//depot/google/third_party/xmpmeta/p4_depot_paths
+
+//depot/google3/third_party/libxml/...
+//depot/google3/third_party/xmpmeta/...

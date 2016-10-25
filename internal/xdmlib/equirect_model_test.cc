@@ -1,31 +1,16 @@
-// xdmlib. A fast XDM parsing and writing library.
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2016 The XMPMeta Authors. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// * Redistributions of source code must retain the above copyright notice,
-//   this list of conditions and the following disclaimer.
-// * Redistributions in binary form must reproduce the above copyright notice,
-//   this list of conditions and the following disclaimer in the documentation
-//   and/or other materials provided with the distribution.
-// * Neither the name of Google Inc. nor the names of its contributors may be
-//   used to endorse or promote products derived from this software without
-//   specific prior written permission.
+//      http://www.apache.org/licenses/LICENSE-2.0
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// Author: miraleung@google.com (Mira Leung)
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "xdmlib/equirect_model.h"
 
@@ -36,6 +21,7 @@
 #include <unordered_map>
 
 #include "gmock/gmock.h"
+#include "xdmlib/const.h"
 #include "xdmlib/dimension.h"
 #include "xdmlib/point.h"
 #include "xmpmeta/file.h"
@@ -62,15 +48,13 @@ namespace xmpmeta {
 namespace xdm {
 namespace {
 
-const char kPrefix[] = "EquirectModel";
-const char kNodePrefix[] = "ImagingModel";
 const char kNamespaceHref[] = "http://ns.xdm.org/photos/1.0/equirectmodel/";
 const char kNodeNamespaceHref[] = "http://ns.xdm.org/photos/1.0/imagingmodel/";
 const char kEquirectModelDataPath[] = "xdm/equirect_model_testdata.txt";
 
 TEST(EquirectModel, GetNamespaces) {
   std::unordered_map<string, string> ns_name_href_map;
-  string prefix(kPrefix);
+  string prefix(XdmConst::EquirectModel());
   const Point cropped_origin(0, 1530);
   const Dimension cropped_size(3476, 1355);
   const Dimension full_size(8192, 4096);
@@ -82,9 +66,10 @@ TEST(EquirectModel, GetNamespaces) {
   ASSERT_TRUE(ns_name_href_map.empty());
   model->GetNamespaces(&ns_name_href_map);
   EXPECT_THAT(ns_name_href_map,
-              UnorderedElementsAre(std::make_pair(kNodePrefix,
+              UnorderedElementsAre(std::make_pair(XdmConst::ImagingModel(),
                                                   kNodeNamespaceHref),
-                                   std::make_pair(kPrefix, kNamespaceHref)));
+                                   std::make_pair(XdmConst::EquirectModel(),
+                                                  kNamespaceHref)));
 }
 
 TEST(EquirectModel, FromData) {
@@ -119,11 +104,11 @@ TEST(EquirectModel, Serialize) {
   ASSERT_NE(nullptr, model);
 
   // Create XML serializer.
-  const char device_name[] = "Device";
-  const char camera_name[] = "Camera";
-  const char imaging_model_name[] = "ImagingModel";
-  const char model_name[] = "EquirectModel";
-  const char namespaceHref[] = "http://notarealh.ref";
+  const char* device_name = XdmConst::Device();
+  const char* camera_name = XdmConst::Camera();
+  const char* imaging_model_name = XdmConst::ImagingModel();
+  const char* model_name = XdmConst::EquirectModel();
+  const char* namespaceHref = "http://notarealh.ref";
   std::unordered_map<string, xmlNsPtr> namespaces;
   namespaces.emplace(device_name, xmlNewNs(nullptr, ToXmlChar(namespaceHref),
                                            ToXmlChar(device_name)));
@@ -131,29 +116,26 @@ TEST(EquirectModel, Serialize) {
                                            ToXmlChar(camera_name)));
   namespaces.emplace(model_name, xmlNewNs(nullptr, ToXmlChar(namespaceHref),
                                           ToXmlChar(model_name)));
-  std::unordered_map<string, xmlNsPtr> prefixes;
-  prefixes.emplace(device_name,
-                   xmlNewNs(nullptr, nullptr, ToXmlChar(device_name)));
-  prefixes.emplace(camera_name,
-                   xmlNewNs(nullptr, nullptr, ToXmlChar(camera_name)));
-  prefixes.emplace(imaging_model_name,
-                   xmlNewNs(nullptr, nullptr, ToXmlChar(imaging_model_name)));
   xmlNodePtr device_node = xmlNewNode(nullptr, ToXmlChar(device_name));
   xmlDocPtr xml_doc = xmlNewDoc(ToXmlChar(XmlConst::Version()));
   xmlDocSetRootElement(xml_doc, device_node);
 
   // Create serializer.
-  SerializerImpl serializer(namespaces, prefixes, device_name, device_node);
+  SerializerImpl serializer(namespaces, device_node);
   std::unique_ptr<Serializer> camera_serializer =
-      serializer.CreateSerializer(camera_name);
+      serializer.CreateSerializer(XdmConst::Namespace(camera_name),
+                                  camera_name);
   ASSERT_NE(nullptr, camera_serializer);
 
   std::unique_ptr<Serializer> imaging_model_serializer =
-      camera_serializer->CreateSerializer(imaging_model_name);
+      camera_serializer->CreateSerializer(
+          XdmConst::Namespace(imaging_model_name), imaging_model_name);;
   ASSERT_NE(nullptr, imaging_model_serializer);
 
   std::unique_ptr<Serializer> model_serializer =
-      imaging_model_serializer->CreateSerializer(kPrefix);
+      imaging_model_serializer->CreateSerializer(
+          XdmConst::Namespace(XdmConst::EquirectModel()),
+          XdmConst::EquirectModel());
   ASSERT_NE(nullptr, model_serializer);
 
   ASSERT_TRUE(model->Serialize(model_serializer.get()));
@@ -168,9 +150,6 @@ TEST(EquirectModel, Serialize) {
   for (const auto& entry : namespaces) {
     xmlFreeNs(entry.second);
   }
-  for (const auto& entry : prefixes) {
-    xmlFreeNs(entry.second);
-  }
   xmlFreeDoc(xml_doc);
 }
 
@@ -180,11 +159,13 @@ TEST(EquirectModel, ReadMetadata) {
       GetFirstDescriptionElement(xmp_data->ExtendedSection());
 
   // Mock an XdmCamera node.
-  xmlNodePtr camera_node = xmlNewNode(nullptr, ToXmlChar("Camera"));
+  xmlNodePtr camera_node = xmlNewNode(nullptr, ToXmlChar(XdmConst::Camera()));
   xmlAddChild(description_node, camera_node);
 
-  string prefix(kPrefix);
-  xmlNodePtr model_node = xmlNewNode(nullptr, ToXmlChar(prefix.data()));
+  string prefix(XdmConst::EquirectModel());
+  xmlNsPtr camera_ns = xmlNewNs(nullptr, ToXmlChar("http://fakeh.ref"),
+                                ToXmlChar(XdmConst::Camera()));
+  xmlNodePtr model_node = xmlNewNode(camera_ns, ToXmlChar(prefix.data()));
   xmlAddChild(camera_node, model_node);
 
   xmlNsPtr model_ns = xmlNewNs(nullptr, ToXmlChar(kNamespaceHref),
@@ -203,7 +184,7 @@ TEST(EquirectModel, ReadMetadata) {
                ToXmlChar("4096"));
 
   // Create an EquirectModel from the metadata.
-  DeserializerImpl deserializer(prefix, description_node);
+  DeserializerImpl deserializer(description_node);
   std::unique_ptr<EquirectModel> model =
       EquirectModel::FromDeserializer(deserializer);
   ASSERT_NE(nullptr, model.get());
@@ -220,6 +201,7 @@ TEST(EquirectModel, ReadMetadata) {
   EXPECT_EQ(8192, dimension.width);
   EXPECT_EQ(4096, dimension.height);
 
+  xmlFreeNs(camera_ns);
   xmlFreeNs(model_ns);
 }
 

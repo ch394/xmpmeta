@@ -1,31 +1,16 @@
-// xdmlib. A fast XDM parsing and writing library.
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2016 The XMPMeta Authors. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// * Redistributions of source code must retain the above copyright notice,
-//   this list of conditions and the following disclaimer.
-// * Redistributions in binary form must reproduce the above copyright notice,
-//   this list of conditions and the following disclaimer in the documentation
-//   and/or other materials provided with the distribution.
-// * Neither the name of Google Inc. nor the names of its contributors may be
-//   used to endorse or promote products derived from this software without
-//   specific prior written permission.
+//      http://www.apache.org/licenses/LICENSE-2.0
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// Author: miraleung@google.com (Mira Leung)
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "xdmlib/cameras.h"
 
@@ -38,6 +23,7 @@
 
 #include "xdmlib/audio.h"
 #include "xdmlib/camera.h"
+#include "xdmlib/const.h"
 #include "xmpmeta/base64.h"
 #include "xmpmeta/file.h"
 #include "xmpmeta/test_util.h"
@@ -71,8 +57,8 @@ const char kCamerasDataPath[] = "xdm/cameras_testdata.txt";
 const char kMediaData[] = "123ABC456DEF";
 
 // Convenience function for creating an XML node.
-xmlNodePtr NewNode(const string& node_name) {
-  return xmlNewNode(nullptr, ToXmlChar(node_name.data()));
+xmlNodePtr NewNode(xmlNsPtr xml_ns, const string& node_name) {
+  return xmlNewNode(xml_ns, ToXmlChar(node_name.data()));
 }
 
 // Convenience function for creating an XML namespace.
@@ -166,23 +152,16 @@ TEST(Cameras, SerializeWithoutRdfPrefix) {
   namespaces.emplace(camera_name, NewNs(kNamespaceHref, camera_name));
   namespaces.emplace(audio_name, NewNs(namespaceHref, audio_name));
 
-  std::unordered_map<string, xmlNsPtr> prefixes;
-  prefixes.emplace(device_name, NewNs("", device_name));
-  prefixes.emplace(camera_name, NewNs("", camera_name));
-
-  xmlNodePtr device_node = NewNode(device_name);
+  xmlNodePtr device_node = NewNode(nullptr, device_name);
   xmlDocPtr xml_doc = xmlNewDoc(ToXmlChar(XmlConst::Version()));
   xmlDocSetRootElement(xml_doc, device_node);
 
   // Create serializer.
-  SerializerImpl serializer(namespaces, prefixes, device_name, device_node);
+  SerializerImpl serializer(namespaces, device_node);
   ASSERT_FALSE(cameras->Serialize(&serializer));
 
   // Free all XML objects.
   for (const auto& entry : namespaces) {
-    xmlFreeNs(entry.second);
-  }
-  for (const auto& entry : prefixes) {
     xmlFreeNs(entry.second);
   }
   xmlFreeDoc(xml_doc);
@@ -209,18 +188,15 @@ TEST(Cameras, Serialize) {
   namespaces.emplace(device_name, NewNs(namespaceHref, device_name));
   namespaces.emplace(camera_name, NewNs(kNamespaceHref, camera_name));
   namespaces.emplace(audio_name, NewNs(namespaceHref, audio_name));
+  namespaces.emplace(XmlConst::RdfPrefix(),
+                     NewNs(XmlConst::RdfNodeNs(), XmlConst::RdfPrefix()));
 
-  std::unordered_map<string, xmlNsPtr> prefixes;
-  prefixes.emplace(device_name, NewNs("", device_name));
-  prefixes.emplace(camera_name, NewNs("", camera_name));
-  prefixes.emplace(XmlConst::RdfPrefix(), NewNs("", XmlConst::RdfPrefix()));
-
-  xmlNodePtr device_node = NewNode(device_name);
+  xmlNodePtr device_node = NewNode(nullptr, device_name);
   xmlDocPtr xml_doc = xmlNewDoc(ToXmlChar(XmlConst::Version()));
   xmlDocSetRootElement(xml_doc, device_node);
 
   // Create serializer.
-  SerializerImpl serializer(namespaces, prefixes, device_name, device_node);
+  SerializerImpl serializer(namespaces, device_node);
   ASSERT_TRUE(cameras->Serialize(&serializer));
 
   const string testdata_path = TestFileAbsolutePath(kCamerasDataPath);
@@ -232,9 +208,6 @@ TEST(Cameras, Serialize) {
   for (const auto& entry : namespaces) {
     xmlFreeNs(entry.second);
   }
-  for (const auto& entry : prefixes) {
-    xmlFreeNs(entry.second);
-  }
   xmlFreeDoc(xml_doc);
 }
 
@@ -244,11 +217,13 @@ TEST(Cameras, ReadMetadata) {
       GetFirstDescriptionElement(xmp_data->ExtendedSection());
 
   // XDM Device node.
-  xmlNodePtr device_node = NewNode("Device");
+  xmlNodePtr device_node = NewNode(nullptr, XdmConst::Device());
   xmlAddChild(description_node, device_node);
 
   // Device:Cameras node.
-  xmlNodePtr cameras_node = NewNode(kNodeName);
+  xmlNsPtr device_ns = xmlNewNs(nullptr, ToXmlChar("http:fakeh.ref"),
+                                ToXmlChar(XdmConst::Device()));
+  xmlNodePtr cameras_node = NewNode(device_ns, kNodeName);
   xmlAddChild(device_node, cameras_node);
 
   // rdf:Seq node.
@@ -265,9 +240,10 @@ TEST(Cameras, ReadMetadata) {
 
   int num_cameras = 3;
   xmlNsPtr audio_ns = NewNs(audio_ns_href, "Audio");
+  xmlNsPtr camera_ns = NewNs("http://fakeh.ref", "Camera");
   for (int i = 0; i < num_cameras; i++) {
-    xmlNodePtr camera_node = NewNode("Camera");
-    xmlNodePtr audio_node = NewNode("Audio");
+    xmlNodePtr camera_node = NewNode(device_ns, "Camera");
+    xmlNodePtr audio_node = NewNode(camera_ns, "Audio");
     xmlSetNsProp(audio_node, audio_ns, ToXmlChar("Mime"),
                  ToXmlChar(audio_mime));
     xmlSetNsProp(audio_node, audio_ns, ToXmlChar("Data"),
@@ -281,7 +257,7 @@ TEST(Cameras, ReadMetadata) {
   }
 
   // Create a Cameras object from the metadata.
-  DeserializerImpl deserializer("Device", description_node);
+  DeserializerImpl deserializer(description_node);
   std::unique_ptr<Cameras> cameras = Cameras::FromDeserializer(deserializer);
   ASSERT_NE(nullptr, cameras.get());
 
@@ -298,6 +274,8 @@ TEST(Cameras, ReadMetadata) {
   }
 
   xmlFreeNs(audio_ns);
+  xmlFreeNs(camera_ns);
+  xmlFreeNs(device_ns);
   xmlFreeNs(rdf_ns);
 }
 

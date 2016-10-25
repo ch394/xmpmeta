@@ -1,31 +1,16 @@
-// xdmlib. A fast XDM parsing and writing library.
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2016 The XMPMeta Authors. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// * Redistributions of source code must retain the above copyright notice,
-//   this list of conditions and the following disclaimer.
-// * Redistributions in binary form must reproduce the above copyright notice,
-//   this list of conditions and the following disclaimer in the documentation
-//   and/or other materials provided with the distribution.
-// * Neither the name of Google Inc. nor the names of its contributors may be
-//   used to endorse or promote products derived from this software without
-//   specific prior written permission.
+//      http://www.apache.org/licenses/LICENSE-2.0
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// Author: miraleung@google.com (Mira Leung)
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "xdmlib/profile.h"
 
@@ -37,6 +22,7 @@
 #include <vector>
 
 #include "gmock/gmock.h"
+#include "xdmlib/const.h"
 #include "xmpmeta/file.h"
 #include "xmpmeta/test_util.h"
 #include "xmpmeta/xmp_const.h"
@@ -63,9 +49,7 @@ namespace xmpmeta {
 namespace xdm {
 namespace {
 
-const char kPrefix[] = "Profile";
 const char kNamespaceHref[] = "http://ns.xdm.org/photos/1.0/profile/";
-
 const char kTestDataPath[] = "xdm/profile_testdata.txt";
 
 // Convenience function for creating an XML node.
@@ -99,7 +83,8 @@ TEST(Profile, GetNamespaces) {
   std::unordered_map<string, string> ns_name_href_map;
   profile->GetNamespaces(&ns_name_href_map);
   EXPECT_THAT(ns_name_href_map,
-              UnorderedElementsAre(std::make_pair(kPrefix, kNamespaceHref)));
+              UnorderedElementsAre(std::make_pair(XdmConst::Profile(),
+                                                  kNamespaceHref)));
 }
 
 TEST(Profile, FromDataEmptyType) {
@@ -172,32 +157,28 @@ TEST(Profile, SerializeWithoutRdfPrefix) {
   std::unique_ptr<Profile> profile = Profile::FromData(type, indices);
 
   // Create XML serializer.
-  const char device_name[] = "Device";
-  const char profile_name[] = "Profile";
-  const char namespaceHref[] = "http://notarealh.ref";
+  const char* device_name = XdmConst::Device();
+  const char* profile_name = XdmConst::Profile();
+  const char* namespaceHref = "http://notarealh.ref";
   std::unordered_map<string, xmlNsPtr> namespaces;
   namespaces.emplace(device_name, NewNs(namespaceHref, device_name));
   namespaces.emplace(profile_name, NewNs(namespaceHref, profile_name));
 
-  std::unordered_map<string, xmlNsPtr> prefixes;
-  prefixes.emplace(device_name, NewNs("", device_name));
   xmlNodePtr device_node = NewNode(device_name);
   xmlDocPtr xml_doc = xmlNewDoc(ToXmlChar(XmlConst::Version()));
   xmlDocSetRootElement(xml_doc, device_node);
 
   // Create serializer.
-  SerializerImpl serializer(namespaces, prefixes, device_name, device_node);
+  SerializerImpl serializer(namespaces, device_node);
   std::unique_ptr<Serializer> profile_serializer =
-      serializer.CreateSerializer(profile_name);
+      serializer.CreateSerializer(XdmConst::Namespace(profile_name),
+                                  profile_name);
   ASSERT_NE(nullptr, profile_serializer);
 
   ASSERT_FALSE(profile->Serialize(profile_serializer.get()));
 
   // Free all XML objects.
   for (const auto& entry : namespaces) {
-    xmlFreeNs(entry.second);
-  }
-  for (const auto& entry : prefixes) {
     xmlFreeNs(entry.second);
   }
   xmlFreeDoc(xml_doc);
@@ -209,17 +190,14 @@ TEST(Profile, Serialize) {
   std::unique_ptr<Profile> profile = Profile::FromData(type, indices);
 
   // Create XML serializer.
-  const char device_name[] = "Device";
-  const char profile_name[] = "Profile";
-  const char namespaceHref[] = "http://notarealh.ref";
+  const char* device_name = XdmConst::Device();
+  const char* profile_name = XdmConst::Profile();
+  const char* namespaceHref = "http://notarealh.ref";
 
   std::unordered_map<string, xmlNsPtr> namespaces;
   namespaces.emplace(device_name, NewNs(namespaceHref, device_name));
   namespaces.emplace(profile_name, NewNs(namespaceHref, profile_name));
-
-  std::unordered_map<string, xmlNsPtr> prefixes;
-  prefixes.emplace(device_name, NewNs("", device_name));
-  prefixes.emplace(XmlConst::RdfPrefix(), NewNs("", XmlConst::RdfPrefix()));
+  namespaces.emplace(XmlConst::RdfPrefix(), NewNs("", XmlConst::RdfPrefix()));
 
   xmlNodePtr device_node = NewNode(device_name);
 
@@ -227,9 +205,10 @@ TEST(Profile, Serialize) {
   xmlDocSetRootElement(xml_doc, device_node);
 
   // Create serializer.
-  SerializerImpl serializer(namespaces, prefixes, device_name, device_node);
+  SerializerImpl serializer(namespaces, device_node);
   std::unique_ptr<Serializer> profile_serializer =
-      serializer.CreateSerializer(profile_name);
+      serializer.CreateSerializer(XdmConst::Namespace(profile_name),
+                                  profile_name);
   ASSERT_NE(nullptr, profile_serializer);
 
   ASSERT_TRUE(profile->Serialize(profile_serializer.get()));
@@ -241,9 +220,6 @@ TEST(Profile, Serialize) {
 
   // Free all XML objects.
   for (const auto& entry : namespaces) {
-    xmlFreeNs(entry.second);
-  }
-  for (const auto& entry : prefixes) {
     xmlFreeNs(entry.second);
   }
   xmlFreeDoc(xml_doc);
@@ -258,24 +234,27 @@ TEST(Profile, ReadMetadataNoIndicesUnsupportedType) {
   xmlNodePtr device_node = NewNode("Device");
   xmlAddChild(description_node, device_node);
 
-  xmlNodePtr profile_node = NewNode(kPrefix);
+  xmlNsPtr device_ns = NewNs(kNamespaceHref, XdmConst::Device());
+  xmlNodePtr profile_node =
+      xmlNewNode(device_ns, ToXmlChar(XdmConst::Profile()));
   xmlAddChild(device_node, profile_node);
 
   xmlNodePtr camera_indices_node = NewNode("CameraIndices");
   xmlAddChild(profile_node, camera_indices_node);
 
   const string type("Supercalifragilisticexpialidocious");
-  xmlNsPtr profile_ns = NewNs(kNamespaceHref, kPrefix);
+  xmlNsPtr profile_ns = NewNs(kNamespaceHref, XdmConst::Profile());
   xmlSetNsProp(profile_node, profile_ns, ToXmlChar("Type"),
                ToXmlChar(type.data()));
 
   // Create a Profile from the metadata.
-  DeserializerImpl deserializer(kPrefix, description_node);
+  DeserializerImpl deserializer(description_node);
   std::unique_ptr<Profile> profile = Profile::FromDeserializer(deserializer);
   ASSERT_NE(nullptr, profile.get());
   EXPECT_EQ(type, profile->GetType());
   EXPECT_TRUE(profile->GetCameraIndices().empty());
 
+  xmlFreeNs(device_ns);
   xmlFreeNs(profile_ns);
 }
 
@@ -288,24 +267,28 @@ TEST(Profile, ReadMetadataEmptyIndicesForDepthPhoto) {
   xmlNodePtr device_node = NewNode("Device");
   xmlAddChild(description_node, device_node);
 
-  xmlNodePtr profile_node = NewNode(kPrefix);
+  xmlNsPtr device_ns = NewNs(kNamespaceHref, XdmConst::Device());
+  xmlNodePtr profile_node =
+      xmlNewNode(device_ns, ToXmlChar(XdmConst::Profile()));
   xmlAddChild(device_node, profile_node);
 
-  xmlNodePtr camera_indices_node = NewNode("CameraIndices");
+  xmlNsPtr profile_ns = NewNs(kNamespaceHref, XdmConst::Profile());
+  xmlNodePtr camera_indices_node =
+      xmlNewNode(profile_ns, ToXmlChar("CameraIndices"));
   xmlAddChild(profile_node, camera_indices_node);
 
   xmlNodePtr rdf_seq_node = SetupRdfSeqOfIndices(std::vector<int>());
   xmlAddChild(camera_indices_node, rdf_seq_node);
 
-  xmlNsPtr profile_ns = NewNs(kNamespaceHref, kPrefix);
   xmlSetNsProp(profile_node, profile_ns, ToXmlChar("Type"),
                ToXmlChar("DepthPhoto"));
 
   // Create a Profile from the metadata.
-  DeserializerImpl deserializer(kPrefix, description_node);
+  DeserializerImpl deserializer(description_node);
   std::unique_ptr<Profile> profile = Profile::FromDeserializer(deserializer);
   ASSERT_EQ(nullptr, profile.get());
 
+  xmlFreeNs(device_ns);
   xmlFreeNs(profile_ns);
   xmlFreeNs(rdf_seq_node->ns);
 }
@@ -319,21 +302,25 @@ TEST(Profile, ReadMetadataNoIndicesListForDepthPhoto) {
   xmlNodePtr device_node = NewNode("Device");
   xmlAddChild(description_node, device_node);
 
-  xmlNodePtr profile_node = NewNode(kPrefix);
+  xmlNsPtr device_ns = NewNs(kNamespaceHref, XdmConst::Device());
+  xmlNodePtr profile_node =
+      xmlNewNode(device_ns, ToXmlChar(XdmConst::Profile()));
   xmlAddChild(device_node, profile_node);
 
-  xmlNodePtr camera_indices_node = NewNode("CameraIndices");
+  xmlNsPtr profile_ns = NewNs(kNamespaceHref, XdmConst::Profile());
+  xmlNodePtr camera_indices_node =
+      xmlNewNode(profile_ns, ToXmlChar("CameraIndices"));
   xmlAddChild(profile_node, camera_indices_node);
 
-  xmlNsPtr profile_ns = NewNs(kNamespaceHref, kPrefix);
   xmlSetNsProp(profile_node, profile_ns, ToXmlChar("Type"),
                ToXmlChar("DepthPhoto"));
 
   // Create a Profile from the metadata.
-  DeserializerImpl deserializer(kPrefix, description_node);
+  DeserializerImpl deserializer(description_node);
   std::unique_ptr<Profile> profile = Profile::FromDeserializer(deserializer);
   ASSERT_EQ(nullptr, profile.get());
 
+  xmlFreeNs(device_ns);
   xmlFreeNs(profile_ns);
 }
 
@@ -346,10 +333,14 @@ TEST(Profile, ReadMetadataValidDepthPhotoTooMayIndices) {
   xmlNodePtr device_node = NewNode("Device");
   xmlAddChild(description_node, device_node);
 
-  xmlNodePtr profile_node = NewNode(kPrefix);
+  xmlNsPtr device_ns = NewNs(kNamespaceHref, XdmConst::Device());
+  xmlNodePtr profile_node =
+      xmlNewNode(device_ns, ToXmlChar(XdmConst::Profile()));
   xmlAddChild(device_node, profile_node);
 
-  xmlNodePtr camera_indices_node = NewNode("CameraIndices");
+  xmlNsPtr profile_ns = NewNs(kNamespaceHref, XdmConst::Profile());
+  xmlNodePtr camera_indices_node =
+      xmlNewNode(profile_ns, ToXmlChar("CameraIndices"));
   xmlAddChild(profile_node, camera_indices_node);
 
   const std::vector<int> indices = {0, 1};
@@ -357,17 +348,17 @@ TEST(Profile, ReadMetadataValidDepthPhotoTooMayIndices) {
   xmlAddChild(camera_indices_node, rdf_seq_node);
 
   const string type("DepthPhoto");
-  xmlNsPtr profile_ns = NewNs(kNamespaceHref, kPrefix);
   xmlSetNsProp(profile_node, profile_ns, ToXmlChar("Type"),
                ToXmlChar(type.data()));
 
   // Create a Profile from the metadata.
-  DeserializerImpl deserializer(kPrefix, description_node);
+  DeserializerImpl deserializer(description_node);
   std::unique_ptr<Profile> profile = Profile::FromDeserializer(deserializer);
   ASSERT_NE(nullptr, profile.get());
   EXPECT_EQ(type, profile->GetType());
   EXPECT_EQ(indices, profile->GetCameraIndices());
 
+  xmlFreeNs(device_ns);
   xmlFreeNs(profile_ns);
   xmlFreeNs(rdf_seq_node->ns);
 }
@@ -381,10 +372,14 @@ TEST(Profile, ReadMetadataValidVrPhoto) {
   xmlNodePtr device_node = NewNode("Device");
   xmlAddChild(description_node, device_node);
 
-  xmlNodePtr profile_node = NewNode(kPrefix);
+  xmlNsPtr device_ns = NewNs(kNamespaceHref, XdmConst::Device());
+  xmlNodePtr profile_node =
+      xmlNewNode(device_ns, ToXmlChar(XdmConst::Profile()));
   xmlAddChild(device_node, profile_node);
 
-  xmlNodePtr camera_indices_node = NewNode("CameraIndices");
+  xmlNsPtr profile_ns = NewNs(kNamespaceHref, XdmConst::Profile());
+  xmlNodePtr camera_indices_node =
+      xmlNewNode(profile_ns, ToXmlChar("CameraIndices"));
   xmlAddChild(profile_node, camera_indices_node);
 
   const std::vector<int> indices = {0, 1};
@@ -392,17 +387,17 @@ TEST(Profile, ReadMetadataValidVrPhoto) {
   xmlAddChild(camera_indices_node, rdf_seq_node);
 
   const string type("VRPhoto");
-  xmlNsPtr profile_ns = NewNs(kNamespaceHref, kPrefix);
   xmlSetNsProp(profile_node, profile_ns, ToXmlChar("Type"),
                ToXmlChar(type.data()));
 
   // Create a Profile from the metadata.
-  DeserializerImpl deserializer(kPrefix, description_node);
+  DeserializerImpl deserializer(description_node);
   std::unique_ptr<Profile> profile = Profile::FromDeserializer(deserializer);
   ASSERT_NE(nullptr, profile.get());
   EXPECT_EQ(type, profile->GetType());
   EXPECT_EQ(indices, profile->GetCameraIndices());
 
+  xmlFreeNs(device_ns);
   xmlFreeNs(profile_ns);
   xmlFreeNs(rdf_seq_node->ns);
 }

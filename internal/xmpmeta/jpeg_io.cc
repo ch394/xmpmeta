@@ -1,31 +1,16 @@
-// xmpmeta. A fast XMP metadata parsing and writing library.
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2016 The XMPMeta Authors. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// * Redistributions of source code must retain the above copyright notice,
-//   this list of conditions and the following disclaimer.
-// * Redistributions in binary form must reproduce the above copyright notice,
-//   this list of conditions and the following disclaimer in the documentation
-//   and/or other materials provided with the distribution.
-// * Neither the name of Google Inc. nor the names of its contributors may be
-//   used to endorse or promote products derived from this software without
-//   specific prior written permission.
+//      http://www.apache.org/licenses/LICENSE-2.0
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// Author: miraleung@google.com (Mira Leung)
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "xmpmeta/jpeg_io.h"
 
@@ -33,7 +18,6 @@
 #include <sstream>
 
 #include "glog/logging.h"
-#include "strings/util.h"
 
 namespace xmpmeta {
 namespace {
@@ -50,32 +34,57 @@ const int kSectionLengthByteSize = 2;
 
 // Returns the number of bytes available to be read. Sets the seek position
 // to the place it was in before calling this function.
-int GetBytesAvailable(std::istream* input_stream) {
-  const std::streampos pos = input_stream->tellg();
+size_t GetBytesAvailable(std::istream* input_stream) {
+  const std::streamoff pos = input_stream->tellg();
+  if (pos == -1) {
+    return 0;
+  }
+
   input_stream->seekg(0, std::ios::end);
-  const std::streamsize len = input_stream->tellg() - pos;
+  if (!input_stream->good()) {
+    return 0;
+  }
+
+  const std::streamoff end = input_stream->tellg();
+  if (end == -1) {
+    return 0;
+  }
   input_stream->seekg(pos);
-  return len;
+
+  if (end <= pos) {
+    return 0;
+  }
+  return end - pos;
 }
 
 // Returns the first byte in the stream cast to an integer.
-size_t ReadByteAsInt(std::istream* input_stream) {
+int ReadByteAsInt(std::istream* input_stream) {
   unsigned char byte;
-  if (!input_stream->read(reinterpret_cast<char*>(&byte), 1)) {
+  input_stream->read(reinterpret_cast<char*>(&byte), 1);
+  if (!input_stream->good()) {
     // Return an invalid value - no byte can be read as -1.
-    return 0;
+    return -1;
   }
   return static_cast<int>(byte);
 }
 
 // Reads the length of a section from 2 bytes.
-int Read2ByteLength(std::istream* input_stream) {
+size_t Read2ByteLength(std::istream* input_stream, bool *error) {
   const int length_high = ReadByteAsInt(input_stream);
   const int length_low = ReadByteAsInt(input_stream);
   if (length_high == -1 || length_low == -1) {
-    return -1;
+    *error = true;
+    return 0;
   }
+  *error = false;
   return length_high << 8 | length_low;
+}
+
+bool HasPrefixString(const string& to_check, const string& prefix) {
+  if (to_check.size() < prefix.size()) {
+    return false;
+  }
+  return std::equal(prefix.begin(), prefix.end(), to_check.begin());
 }
 
 }  // namespace
@@ -90,8 +99,8 @@ bool Section::IsMarkerApp1() {
   return marker == kApp1;
 }
 
-std::vector<Section> Parse(std::istream* input_stream, bool read_meta_only,
-                           const string& section_header) {
+std::vector<Section> Parse(const ParseOptions& options,
+                           std::istream* input_stream) {
   std::vector<Section> sections;
   // Return early if this is not the start of a JPEG section.
   if (ReadByteAsInt(input_stream) != 0xff ||
@@ -119,15 +128,14 @@ std::vector<Section> Parse(std::istream* input_stream, bool read_meta_only,
     if (marker == kSos) {
       // kSos indicates the image data will follow and no metadata after that,
       // so read all data at one time.
-      if (!read_meta_only) {
+      if (!options.read_meta_only) {
         Section section;
         section.marker = marker;
         section.is_image_section = true;
-        const int bytes_available = GetBytesAvailable(input_stream);
+        const size_t bytes_available = GetBytesAvailable(input_stream);
         section.data.resize(bytes_available);
-       if (input_stream->read(&section.data[0], bytes_available) &&
-          (section_header.empty() ||
-           HasPrefixString(section.data, section_header))) {
+        input_stream->read(&section.data[0], bytes_available);
+        if (input_stream->good()) {
           sections.push_back(section);
         }
       }
@@ -135,14 +143,22 @@ std::vector<Section> Parse(std::istream* input_stream, bool read_meta_only,
       return sections;
     }
 
-    const size_t length = Read2ByteLength(input_stream);
-    if (length < kSectionLengthByteSize) {
+    bool error;
+    const size_t length = Read2ByteLength(input_stream, &error);
+    if (error || length < kSectionLengthByteSize) {
       // No sections to read.
       LOG(WARNING) << "No sections to read; section length is " << length;
       return sections;
     }
 
-    if (!read_meta_only || marker == kApp1) {
+    const size_t bytes_left = GetBytesAvailable(input_stream);
+    if (length - kSectionLengthByteSize > bytes_left) {
+      LOG(WARNING) << "Invalid section length = " << length
+                   << " total bytes available = " << bytes_left;
+      return sections;
+    }
+
+    if (!options.read_meta_only || marker == kApp1) {
       Section section;
       section.marker = marker;
       section.is_image_section = false;
@@ -153,10 +169,15 @@ std::vector<Section> Parse(std::istream* input_stream, bool read_meta_only,
                      << section.data.size() << "and data size " << data_size;
         return sections;
       }
-      if (input_stream->read(&section.data[0], section.data.size()) &&
-          (section_header.empty() ||
-           HasPrefixString(section.data, section_header))) {
+      input_stream->read(&section.data[0], section.data.size());
+      if (input_stream->good() && (options.section_header.empty() ||
+            HasPrefixString(section.data, options.section_header))) {
         sections.push_back(section);
+        // Return if we have specified to return the 1st section with
+        // the given name.
+        if (options.section_header_return_first) {
+          return sections;
+        }
       }
     } else {
       // Skip this section since all EXIF/XMP meta will be in kApp1 section.

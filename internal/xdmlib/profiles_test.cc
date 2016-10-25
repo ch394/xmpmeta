@@ -1,31 +1,16 @@
-// xdmlib. A fast XDM parsing and writing library.
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2016 The XMPMeta Authors. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// * Redistributions of source code must retain the above copyright notice,
-//   this list of conditions and the following disclaimer.
-// * Redistributions in binary form must reproduce the above copyright notice,
-//   this list of conditions and the following disclaimer in the documentation
-//   and/or other materials provided with the distribution.
-// * Neither the name of Google Inc. nor the names of its contributors may be
-//   used to endorse or promote products derived from this software without
-//   specific prior written permission.
+//      http://www.apache.org/licenses/LICENSE-2.0
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// Author: miraleung@google.com (Mira Leung)
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "xdmlib/profiles.h"
 
@@ -36,6 +21,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "xdmlib/const.h"
 #include "xdmlib/profile.h"
 #include "xmpmeta/base64.h"
 #include "xmpmeta/file.h"
@@ -61,15 +47,14 @@ namespace xmpmeta {
 namespace xdm {
 namespace {
 
-const char kNodeName[] = "Profiles";
 const char kNamespaceHref[] = "http://ns.xdm.org/photos/1.0/profile/";
 
 // Test data constants.
 const char kProfilesDataPath[] = "xdm/profiles_testdata.txt";
 
 // Convenience function for creating an XML node.
-xmlNodePtr NewNode(const string& node_name) {
-  return xmlNewNode(nullptr, ToXmlChar(node_name.data()));
+xmlNodePtr NewNode(const xmlNsPtr xml_ns, const string& node_name) {
+  return xmlNewNode(xml_ns, ToXmlChar(node_name.data()));
 }
 
 // Convenience function for creating an XML namespace.
@@ -82,11 +67,9 @@ xmlNsPtr NewNs(const string& href, const string& ns_name) {
 // Returns an XML rdf:Seq node with a list of the given values.
 xmlNodePtr SetupRdfSeqOfIndices(const std::vector<int>& values,
                                 const xmlNsPtr rdf_ns) {
-  xmlNodePtr rdf_seq_node =
-      xmlNewNode(rdf_ns, ToXmlChar(XmlConst::RdfSeq()));
+  xmlNodePtr rdf_seq_node = NewNode(rdf_ns, XmlConst::RdfSeq());
   for (int value : values) {
-    xmlNodePtr rdf_li_node =
-        xmlNewNode(rdf_ns, ToXmlChar(XmlConst::RdfLi()));
+    xmlNodePtr rdf_li_node = NewNode(rdf_ns, XmlConst::RdfLi());
     xmlNodeSetContent(
         rdf_li_node, ToXmlChar(std::to_string(value).data()));
     xmlAddChild(rdf_seq_node, rdf_li_node);
@@ -179,23 +162,16 @@ TEST(Profiles, SerializeWithoutRdfPrefix) {
   namespaces.emplace(device_name, NewNs(namespaceHref, device_name));
   namespaces.emplace(profile_name, NewNs(kNamespaceHref, profile_name));
 
-  std::unordered_map<string, xmlNsPtr> prefixes;
-  prefixes.emplace(device_name, NewNs("", device_name));
-  prefixes.emplace(profile_name, NewNs("", profile_name));
-
-  xmlNodePtr device_node = NewNode(device_name);
+  xmlNodePtr device_node = NewNode(nullptr, device_name);
   xmlDocPtr xml_doc = xmlNewDoc(ToXmlChar(XmlConst::Version()));
   xmlDocSetRootElement(xml_doc, device_node);
 
   // Create serializer.
-  SerializerImpl serializer(namespaces, prefixes, device_name, device_node);
+  SerializerImpl serializer(namespaces, device_node);
   ASSERT_FALSE(profiles->Serialize(&serializer));
 
   // Free all XML objects.
   for (const auto& entry : namespaces) {
-    xmlFreeNs(entry.second);
-  }
-  for (const auto& entry : prefixes) {
     xmlFreeNs(entry.second);
   }
   xmlFreeDoc(xml_doc);
@@ -220,18 +196,15 @@ TEST(Profiles, Serialize) {
   std::unordered_map<string, xmlNsPtr> namespaces;
   namespaces.emplace(device_name, NewNs(namespaceHref, device_name));
   namespaces.emplace(profile_name, NewNs(kNamespaceHref, profile_name));
+  namespaces.emplace(XmlConst::RdfPrefix(),
+                     NewNs(XmlConst::RdfNodeNs(), XmlConst::RdfPrefix()));
 
-  std::unordered_map<string, xmlNsPtr> prefixes;
-  prefixes.emplace(device_name, NewNs("", device_name));
-  prefixes.emplace(profile_name, NewNs("", profile_name));
-  prefixes.emplace(XmlConst::RdfPrefix(), NewNs("", XmlConst::RdfPrefix()));
-
-  xmlNodePtr device_node = NewNode(device_name);
+  xmlNodePtr device_node = NewNode(nullptr, device_name);
   xmlDocPtr xml_doc = xmlNewDoc(ToXmlChar(XmlConst::Version()));
   xmlDocSetRootElement(xml_doc, device_node);
 
   // Create serializer.
-  SerializerImpl serializer(namespaces, prefixes, device_name, device_node);
+  SerializerImpl serializer(namespaces, device_node);
   ASSERT_TRUE(profiles->Serialize(&serializer));
 
   const string testdata_path = TestFileAbsolutePath(kProfilesDataPath);
@@ -243,9 +216,6 @@ TEST(Profiles, Serialize) {
   for (const auto& entry : namespaces) {
     xmlFreeNs(entry.second);
   }
-  for (const auto& entry : prefixes) {
-    xmlFreeNs(entry.second);
-  }
   xmlFreeDoc(xml_doc);
 }
 
@@ -255,17 +225,17 @@ TEST(Profiles, ReadMetadata) {
       GetFirstDescriptionElement(xmp_data->ExtendedSection());
 
   // XDM Device node.
-  xmlNodePtr device_node = NewNode("Device");
+  xmlNodePtr device_node = NewNode(nullptr, "Device");
   xmlAddChild(description_node, device_node);
 
   // Device:Profiles node.
-  xmlNodePtr profiles_node = NewNode(kNodeName);
+  xmlNsPtr device_ns = NewNs("http://fakeh.ref", XdmConst::Device());
+  xmlNodePtr profiles_node = NewNode(device_ns, XdmConst::Profiles());
   xmlAddChild(device_node, profiles_node);
 
   // rdf:Seq node.
   xmlNsPtr rdf_ns = NewNs("http://fakeh.ref", XmlConst::RdfPrefix());
-  xmlNodePtr rdf_seq_node =
-      xmlNewNode(rdf_ns, ToXmlChar(XmlConst::RdfSeq()));
+  xmlNodePtr rdf_seq_node = NewNode(rdf_ns, XmlConst::RdfSeq());
   xmlAddChild(profiles_node, rdf_seq_node);
 
   // Set up Profile nodes.
@@ -277,10 +247,11 @@ TEST(Profiles, ReadMetadata) {
   // VR photo profile.
   std::vector<int> indices = {0, 1};
   xmlNodePtr vr_indices_rdf_seq_node = SetupRdfSeqOfIndices(indices, rdf_ns);
-  xmlNodePtr vr_profile_camera_indices_node = NewNode("CameraIndices");
+  xmlNodePtr vr_profile_camera_indices_node =
+      NewNode(profile_ns, "CameraIndices");
   xmlAddChild(vr_profile_camera_indices_node, vr_indices_rdf_seq_node);
 
-  xmlNodePtr vr_profile_node = NewNode(profile_prefix);
+  xmlNodePtr vr_profile_node = NewNode(device_ns, profile_prefix);
   xmlAddChild(vr_profile_node, vr_profile_camera_indices_node);
   xmlSetNsProp(vr_profile_node, profile_ns, ToXmlChar("Type"),
                ToXmlChar("VRPhoto"));
@@ -289,30 +260,29 @@ TEST(Profiles, ReadMetadata) {
   indices = {0};
   xmlNodePtr depth_camera_indices_rdf_seq_node =
       SetupRdfSeqOfIndices(indices, rdf_ns);
-  xmlNodePtr depth_profile_camera_indices_node = NewNode("CameraIndices");
+  xmlNodePtr depth_profile_camera_indices_node =
+      NewNode(profile_ns, "CameraIndices");
   xmlAddChild(depth_profile_camera_indices_node,
               depth_camera_indices_rdf_seq_node);
 
-  xmlNodePtr depth_profile_node = NewNode(profile_prefix);
+  xmlNodePtr depth_profile_node = NewNode(device_ns, profile_prefix);
   xmlAddChild(depth_profile_node, depth_profile_camera_indices_node);
   xmlSetNsProp(depth_profile_node, profile_ns, ToXmlChar("Type"),
                ToXmlChar("DepthPhoto"));
 
 
   // Insert profile nodes into the rdf:Seq list of profiles.
-  xmlNodePtr vr_profile_rdf_li_node =
-      xmlNewNode(rdf_ns, ToXmlChar(XmlConst::RdfLi()));
+  xmlNodePtr vr_profile_rdf_li_node = NewNode(rdf_ns, XmlConst::RdfLi());
   xmlAddChild(vr_profile_rdf_li_node, vr_profile_node);
   xmlAddChild(rdf_seq_node, vr_profile_rdf_li_node);
 
 
-  xmlNodePtr depth_profile_rdf_li_node =
-      xmlNewNode(rdf_ns, ToXmlChar(XmlConst::RdfLi()));
+  xmlNodePtr depth_profile_rdf_li_node = NewNode(rdf_ns, XmlConst::RdfLi());
   xmlAddChild(depth_profile_rdf_li_node, depth_profile_node);
   xmlAddChild(rdf_seq_node, depth_profile_rdf_li_node);
 
   // Create a Profiles object from the metadata.
-  DeserializerImpl deserializer("Device", description_node);
+  DeserializerImpl deserializer(description_node);
   std::unique_ptr<Profiles> profiles = Profiles::FromDeserializer(deserializer);
   ASSERT_NE(nullptr, profiles.get());
 
@@ -323,6 +293,7 @@ TEST(Profiles, ReadMetadata) {
   ExpectProfileEquals(*vr_profile, *read_profile_list[0]);
   ExpectProfileEquals(*depth_profile, *read_profile_list[1]);
 
+  xmlFreeNs(device_ns);
   xmlFreeNs(profile_ns);
   xmlFreeNs(rdf_ns);
 }
