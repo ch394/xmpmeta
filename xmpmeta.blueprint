@@ -1,6 +1,3 @@
-// blueprint file for the TAP project third_party.xmpmeta
-// https://test.corp.google.com/ui#p=third_party.xmpmeta
-
 include "devtools/blueprint/ncl/blueprint_file.ncl";
 
 blueprint_file = ::blueprint::BlueprintFile(

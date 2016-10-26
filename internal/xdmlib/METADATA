@@ -1,5 +1,3 @@
-# Format: google3/devtools/metadata/metadata.proto (go/google3metadata)
-
 name: "xdmlib"
 description:
     "xdmlib is a portable library for parsing and writing XDM metadata, "
@@ -10,8 +8,6 @@ description:
     "and PNG, while maintaining compatibility with existing image viewers. The "
     "data storage format is based on the Adobe XMP standard. More details at "
     "[xdm.org](http://xdm.org). "
-    " "
-    "The full specification is at [go/xdm](http://go/xdm)."
 
 third_party {
   url {

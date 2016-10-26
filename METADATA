@@ -1,5 +1,3 @@
-# https://cs.corp.google.com/#google3/devtools/metadata/presubmit.proto
-
 name: "xmpmeta"
 description:
     "xmpmeta is a portable library for parsing and writing XMP metadata, "

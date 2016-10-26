@@ -543,7 +543,6 @@ inline void* memrchr(const void* bytes, int find_char, size_t len) {
 #endif
 
 // Tell ControlFlowIntegrity sanitizer to not instrument a given function.
-// See http://go/llvm-cfi for details.
 #ifdef CONTROL_FLOW_INTEGRITY
 #define ATTRIBUTE_NO_SANITIZE_CFI __attribute__((no_sanitize("cfi")))
 #else
