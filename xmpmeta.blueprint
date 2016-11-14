@@ -24,7 +24,7 @@ blueprint_file = ::blueprint::BlueprintFile(
     ),
   ],
   project_name = "third_party.xmpmeta",
-  project_grouping = ["Chrome & Apps", "Chrome", "Cardboard"],
+  project_grouping = ["Technical Infrastructure", "Daydream"],
   tech_lead = ["miraleung"],
   mdb_groups = ["vr-prod"],
   dev_mailing_list = "tp-cyclops-dev@google.com",
