@@ -179,4 +179,4 @@ if (BUILD_TESTING AND GFLAGS)
   xdmlib_test(profile)
   xdmlib_test(profiles)
 
- endif (BUILD_TESTING)
+ endif (BUILD_TESTING AND GFLAGS)

@@ -1,6 +1,5 @@
 xmpmeta welcomes patches/commits for features and bugfixes.
 
-[//]: # (TODO: Add Gerrit, GitHub, and mailing list URLs when they're set up.)
 We use Gerrit to collaborate and review changes. Gerrit enables pre-commit reviews so that
 xmpmeta can maintain a linear history with clean, reviewed commits, and
 no merges. Contributions are accepted only through our Gerrit repo, and maintain
@@ -17,6 +16,5 @@ mailing list for a design discussion before writing code.
 Developers will need to sign the Contributor License Agreement (CLA) with
 Google when signing up for the xmpmeta repo on Gerrit. This gives Google a
 royalty-free unlimited license to use contributions, and developers retain
-copyright. Please sign the agreement for an individual or a corporation, as appropriate.
-
-[//]: # (TODO: Add Gerrit set up instructions here.)
+copyright. Please sign the agreement for an individual or a corporation, as
+appropriate.

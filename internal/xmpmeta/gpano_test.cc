@@ -124,7 +124,7 @@ TEST(GPano, ParseXmpTest) {
       "vr_photo_no_audio_std_section_data.txt";
   const char kPhotoSphereStdSectionData[] = "photo_sphere_std_section_data.txt";
 
-  const vector<string> data_paths = {
+  const std::vector<string> data_paths = {
       TestFileAbsolutePath(kStandardSectionWithAudioData),
       TestFileAbsolutePath(kStandardSectionWithoutAudioData),
       TestFileAbsolutePath(kPhotoSphereStdSectionData)};

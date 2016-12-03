@@ -57,6 +57,7 @@ cc_library(
         "includes",
     ],
     visibility = [
+        "//ads/insights/btc/image:__pkg__",
         "//cityblock/geometry/video",
         "//vr/photos:__subpackages__",
     ],
